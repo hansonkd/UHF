@@ -1,0 +1,6 @@
+testDB
+.DS_Store
+.hsenv
+.virtualenv
+*.o
+*.hi
