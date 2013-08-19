@@ -27,16 +27,14 @@ import           Data.Typeable
 
 import           System.TimeIt
 
-data TestBsonData = TestBsonData { test20 :: Maybe TestBsonData, test21 :: Int }
+data TestBsonData = TestBsonData { test20 :: Maybe TestBsonData, test21 :: Double, test22 :: [Double] }
   deriving (Generic, Show, Typeable, Eq)
 instance ToBSON TestBsonData
 instance FromBSON TestBsonData
 
+serializedPutSmall x = ["operation" B.:= (B.Doc $ toBSON $ UFOperation UFPut $ (["payload" B.:= (B.Doc $ toBSON $ TestBsonData (Just $ TestBsonData Nothing (x*10) []) x [])]))]
 
-sampleData :: B.Document
-sampleData = toBSON $ TestBsonData (Just $ TestBsonData Nothing 0) 4
-
-serializedPut x = ["operation" B.:= (B.Doc $ toBSON $ UFOperation UFPut $ (["payload" B.:= (B.Doc $ toBSON $ TestBsonData (Just $ TestBsonData Nothing (x*10)) x)]))]
+serializedPutBig x = ["operation" B.:= (B.Doc $ toBSON $ UFOperation UFPut $ (["payload" B.:= (B.Doc $ toBSON $ TestBsonData (Just $ TestBsonData Nothing (x*10) [1..100]) x [1..100])]))]
 
 serializedGetLT = ["operation" B.:= (B.Doc $ toBSON $ UFOperation UFFilter (["parameters" B.:= (B.Doc $
                                          [ "$LT" B.:= (B.Doc $ 
@@ -51,28 +49,36 @@ serializedGetUnion = ["operation" B.:= (B.Doc $ toBSON $ UFOperation UFFilter ([
                                              , "arg2" B.:= B.Doc ["$GT" B.:= B.Doc ["label" B.:= B.String "test21", "value" B.:= B.Int32 5]]
                                              ])
                                          ])]))]
-               
+testRangeInsert :: [Double]
+testRangeInsert = [0..1000]
+
+testRangeSearch :: [Double]
+testRangeSearch = [0..100]
+
 main :: IO ()
 main = do   args <- getArgs
             withSocketsDo $
              do addrinfos <- getAddrInfo Nothing (Just "localhost") (Just "5002")
                 let serveraddr = head addrinfos
-                sock <- socket (addrFamily serveraddr) Stream defaultProtocol
                 if null args
-                    then do putStrLn "Getting documents from server 1000 times..."
+                    then do putStrLn "Puting 1000 small documents to server individually..."
+                            sock <- socket (addrFamily serveraddr) Stream defaultProtocol
                             connect sock (addrAddress serveraddr)
-                            timeIt $ forM_ [0..1000] (\x -> do
+                            timeIt $ forM_ testRangeInsert (\x -> do
+                                sendAll sock $ runPut $ putDocument $ serializedPutSmall x
+                                void $ recv sock 1024)
+                            putStrLn "Done. \nPuting 1000 big documents to server individually..."
+                            sock <- socket (addrFamily serveraddr) Stream defaultProtocol
+                            connect sock (addrAddress serveraddr)
+                            timeIt $ forM_ testRangeInsert (\x -> do
+                                sendAll sock $ runPut $ putDocument $ serializedPutBig x
+                                void $ recv sock 1024)
+                            putStrLn "Done Putting \nGetting documents from server 100 times..."
+                            timeIt $ forM_ testRangeSearch (\x -> do
                                 sendAll sock $ runPut $ putDocument $ serializedGetLT
                                 void $ recv sock (1024 * 1024))
-                    else do let (arg:_) = args
-                            if (arg == "local")
-                                then do putStrLn "Puting 1000 documents directly to database..."
-                                        db   <- loadStateFromPath "testDB/"
-                                        timeIt $ forM_ [0..1000] (\x -> insertNewDocument db ["value" B.:= (B.Float x)])
-                                else do putStrLn "Puting 1000 documents to server..."
-                                        connect sock (addrAddress serveraddr)
-                                        timeIt $ forM_ [0..1000] (\x -> do
-                                            sendAll sock $ runPut $ putDocument $ serializedPut x
-                                            recv sock 1024 >>= (\x -> return ())) 
-                sClose sock
+                            sClose sock
+                    else do putStrLn "Puting 1000 documents directly to database..."
+                            db   <- loadStateFromPath "testDB/"
+                            timeIt $ forM_ testRangeInsert (\x -> insertNewDocument db ["value" B.:= (B.Float x)])
                 putStrLn "Done!"
