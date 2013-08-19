@@ -4,3 +4,4 @@ testDB
 .virtualenv
 *.o
 *.hi
+dist
