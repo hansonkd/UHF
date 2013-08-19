@@ -92,7 +92,7 @@ Available filters are $LT, $GT, $EQ for comparing and $union and $intersection f
 
 I included some basic benchmarks written in python and haskell comparing this database to MongoDB. So far insertion is comparable with MongoDB and is even 2x faster than Mongo when not in UnConfirmedWriteMode. Searching is very slow because it has to filter over all the documents in the database when it searches. I plan to fix this soon though.
 
-Here are some results:
+Here are some results. The big document consists of a nested document that is 2 deep with an array of length 500 on each level.
 
 MongoDB UnConfirmedWriteMode
 
@@ -134,6 +134,7 @@ Getting documents from server 100 times...
 CPU time:   0.08s
 Done!
 ```
+
 # Plans for the future
 
 Future plans for this project could include implementing a DSL for performing mapreduce and filter queries. 

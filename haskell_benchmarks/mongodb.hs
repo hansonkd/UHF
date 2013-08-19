@@ -28,8 +28,8 @@ serializedPutSmall x = toBSON $ TestBsonData (Just $ TestBsonData Nothing (x*10)
 serializedPutBig x = toBSON $ TestBsonData (Just $ TestBsonData Nothing (x*10) [1..500]) x [1..500]
 
 
-testRangeInsert = [0..1000]
-testRangeSearch = [0..100]
+testRangeInsert = [0..100]
+testRangeSearch = [0..10]
 
 main = do
     pipe <- runIOE $ connect (host "127.0.0.1")
@@ -41,6 +41,10 @@ main = do
     void $ timeIt $ access pipe master "test" $ forM_ testRangeInsert (\x -> insertBigDocuments x)
     putStrLn "Done. \nNow Searching over documents 100x..."
     void $ timeIt $ access pipe UnconfirmedWrites "test" $ forM_ testRangeSearch (\_ -> void searchDocuments)
+    putStrLn "Showing results of query:"
+    result <- access pipe master "test" $ do
+                    docs <- searchDocuments
+                    liftIO $ print $ length docs
     putStrLn "Done."
     close pipe
     
@@ -48,7 +52,7 @@ main = do
 -- | reduceFn = Javascript [] "function (key, values) {var total = 0; for (var i = 0; i < values.length; i++) {total += values[i];} return total;}"
 -- | forM_ [0..100] $ (\_ -> runMR' (mapReduce "db_test" mapFn reduceFn))
 
-serializedSelect = [ "test20.21" B.:= (B.Doc $ [ "$lt" B.:= B.Int32 100]) ]
+serializedSelect = [ "test20.test21" B.:= (B.Doc $ [ "$lt" B.:= B.Int32 100]), "test21" B.:= (B.Doc $ [ "$gt" B.:= B.Int32 5]) ]
 
 clearDocuments = delete (select [] "db_test")
 

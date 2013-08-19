@@ -34,7 +34,7 @@ loop sock database = do
     forkIO $ body conn BS.empty
     loop sock database
     where body c built = do 
-              msg <- recv c (1024)
+              msg <- recv c (1024 * 16)
               if (BS.length msg > 0)
                   then do
                       -- | Find a better way to check that server has sent all the data
