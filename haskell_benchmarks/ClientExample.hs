@@ -5,10 +5,11 @@
 module Client where
 
 import           Data.Maybe (fromMaybe)
-import           Control.Monad (forM_)
+import           Control.Monad (void, forM_)
 import           Network.Socket hiding (recv)
 import           Network.Socket.ByteString.Lazy (recv, sendAll)
 
+import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Lazy.Char8 as C
 import qualified Data.Bson as B
 import           Data.Bson.Generic
@@ -37,28 +38,32 @@ sampleData = toBSON $ TestBsonData (Just $ TestBsonData Nothing 0) 4
 
 serializedPut x = ["operation" B.:= (B.Doc $ toBSON $ UFOperation UFPut $ (["payload" B.:= (B.Doc $ toBSON $ TestBsonData (Just $ TestBsonData Nothing (x*10)) x)]))]
 
-serializedGet = ["operation" B.:= (B.Doc $ toBSON $ UFOperation UFFilter (["parameters" B.:= (B.Doc $
+serializedGetLT = ["operation" B.:= (B.Doc $ toBSON $ UFOperation UFFilter (["parameters" B.:= (B.Doc $
                                          [ "$LT" B.:= (B.Doc $ 
                                              [ "label" B.:= B.String "test20.test21"
                                              , "value" B.:= B.Int32 100
                                              ])
                                          ])]))]
                                          
+serializedGetUnion = ["operation" B.:= (B.Doc $ toBSON $ UFOperation UFFilter (["parameters" B.:= (B.Doc $
+                                         [ "$union" B.:= (B.Doc $ 
+                                             [ "arg1" B.:= B.Doc ["$LT" B.:= B.Doc ["label" B.:= B.String "test20.test21", "value" B.:= B.Int32 100]]
+                                             , "arg2" B.:= B.Doc ["$GT" B.:= B.Doc ["label" B.:= B.String "test21", "value" B.:= B.Int32 5]]
+                                             ])
+                                         ])]))]
+               
 main :: IO ()
 main = do   args <- getArgs
-            print $ buildFieldIndex sampleData Nothing
             withSocketsDo $
              do addrinfos <- getAddrInfo Nothing (Just "localhost") (Just "5002")
                 let serveraddr = head addrinfos
                 sock <- socket (addrFamily serveraddr) Stream defaultProtocol
-                print serializedGet
                 if null args
                     then do putStrLn "Getting documents from server 1000 times..."
                             connect sock (addrAddress serveraddr)
-                            timeIt $ forM_ [0..1] (\x -> do
-                                sendAll sock $ runPut $ putDocument $ serializedGet
-                                resp <- recv sock (1024 * 1024)
-                                print $ runGet getDocument resp)
+                            timeIt $ forM_ [0..1000] (\x -> do
+                                sendAll sock $ runPut $ putDocument $ serializedGetLT
+                                void $ recv sock (1024 * 1024))
                     else do let (arg:_) = args
                             if (arg == "local")
                                 then do putStrLn "Puting 1000 documents directly to database..."
