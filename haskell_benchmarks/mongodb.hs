@@ -25,7 +25,7 @@ instance FromBSON TestBsonData
 
 serializedPutSmall x = toBSON $ TestBsonData (Just $ TestBsonData Nothing (x*10) []) x []
 
-serializedPutBig x = toBSON $ TestBsonData (Just $ TestBsonData Nothing (x*10) [1..100]) x [1..100]
+serializedPutBig x = toBSON $ TestBsonData (Just $ TestBsonData Nothing (x*10) [1..500]) x [1..500]
 
 
 testRangeInsert = [0..1000]
@@ -35,11 +35,11 @@ main = do
     pipe <- runIOE $ connect (host "127.0.0.1")
     putStrLn "Now Clearing"
     void $ timeIt $ access pipe master "test" $ clearDocuments
-    putStrLn "Done. \nNow Inserting 1000 small docs.."
+    putStrLn "Done. \nPuting 1000 small documents to server individually..."
     void $ timeIt $ access pipe master "test" $ forM_ testRangeInsert (\x -> insertSmallDocuments x)
-    putStrLn "Done. \nNow Inserting 1000 big docs.."
+    putStrLn "Done. \nPuting 1000 big documents to server individually..."
     void $ timeIt $ access pipe master "test" $ forM_ testRangeInsert (\x -> insertBigDocuments x)
-    putStrLn "Done. \nNow Searching..."
+    putStrLn "Done. \nNow Searching over documents 100x..."
     void $ timeIt $ access pipe UnconfirmedWrites "test" $ forM_ testRangeSearch (\_ -> void searchDocuments)
     putStrLn "Done."
     close pipe

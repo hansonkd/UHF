@@ -8,7 +8,9 @@ import           Data.Maybe (fromMaybe)
 import           Control.Monad (void, forM_)
 import           Network.Socket hiding (recv)
 import           Network.Socket.ByteString.Lazy (recv, sendAll)
+import qualified Network.Socket.ByteString as SBS
 
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Lazy.Char8 as C
 import qualified Data.Bson as B
@@ -34,7 +36,7 @@ instance FromBSON TestBsonData
 
 serializedPutSmall x = ["operation" B.:= (B.Doc $ toBSON $ UFOperation UFPut $ (["payload" B.:= (B.Doc $ toBSON $ TestBsonData (Just $ TestBsonData Nothing (x*10) []) x [])]))]
 
-serializedPutBig x = ["operation" B.:= (B.Doc $ toBSON $ UFOperation UFPut $ (["payload" B.:= (B.Doc $ toBSON $ TestBsonData (Just $ TestBsonData Nothing (x*10) [1..100]) x [1..100])]))]
+serializedPutBig x = ["operation" B.:= (B.Doc $ toBSON $ UFOperation UFPut $ (["payload" B.:= (B.Doc $ toBSON $ TestBsonData (Just $ TestBsonData Nothing (x*10) [1..500]) x [1..500])]))]
 
 serializedGetLT = ["operation" B.:= (B.Doc $ toBSON $ UFOperation UFFilter (["parameters" B.:= (B.Doc $
                                          [ "$LT" B.:= (B.Doc $ 
@@ -66,17 +68,21 @@ main = do   args <- getArgs
                             connect sock (addrAddress serveraddr)
                             timeIt $ forM_ testRangeInsert (\x -> do
                                 sendAll sock $ runPut $ putDocument $ serializedPutSmall x
+                                sendAll sock "\n<hfEnd>"
                                 void $ recv sock 1024)
                             putStrLn "Done. \nPuting 1000 big documents to server individually..."
                             sock <- socket (addrFamily serveraddr) Stream defaultProtocol
                             connect sock (addrAddress serveraddr)
                             timeIt $ forM_ testRangeInsert (\x -> do
                                 sendAll sock $ runPut $ putDocument $ serializedPutBig x
+                                void $ send sock "\n<hfEnd>"
                                 void $ recv sock 1024)
                             putStrLn "Done Putting \nGetting documents from server 100 times..."
                             timeIt $ forM_ testRangeSearch (\x -> do
                                 sendAll sock $ runPut $ putDocument $ serializedGetLT
+                                void $ send sock "\n<hfEnd>"
                                 void $ recv sock (1024 * 1024))
+                            
                             sClose sock
                     else do putStrLn "Puting 1000 documents directly to database..."
                             db   <- loadStateFromPath "testDB/"

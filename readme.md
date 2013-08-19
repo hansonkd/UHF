@@ -1,4 +1,4 @@
-# UFdb a reliable BSON database with ACID written in Haskell.
+# UFdb a reliable performant BSON database with ACID written in Haskell.
 
 
 UFdb started out as an experiment into working with binary structures as well as persitence in Haskell. The goal of the project is to be slim (the core server is less than 250 lines) as well as give decent performance. The server is built with threading in mind using Haskell's standard forkIO. Acidstate automatically handles thread access for us. Currently all lookups are naive.
@@ -97,27 +97,26 @@ Here are some results:
 MongoDB UnConfirmedWriteMode
 
 ```
-Now Inserting 1000 small docs..
-CPU time:   0.15s
+Puting 1000 small documents to server individually...
+CPU time:   0.17s
 Done.
-Now Inserting 1000 big docs..
-CPU time:   1.94s
+Puting 1000 big documents to server individually...
+CPU time:   9.87s
 Done.
-Now Searching...
+Now Searching over documents 100x...
 CPU time:   0.03s
-Done.
 ```
 
 MongoDB ConfirmedWriteMode
 
 ```
-Now Inserting 1000 small docs..
-CPU time:   0.28s
+Puting 1000 small documents to server individually...
+CPU time:   0.27s
 Done.
-Now Inserting 1000 big docs..
-CPU time:   1.90s
+Puting 1000 big documents to server individually...
+CPU time:   9.48s
 Done.
-Now Searching...
+Now Searching over documents 100x...
 CPU time:   0.03s
 Done.
 ```
@@ -126,13 +125,13 @@ UFDB:
 
 ```
 Puting 1000 small documents to server individually...
-CPU time:   0.16s
+CPU time:   0.17s
 Done.
 Puting 1000 big documents to server individually...
-CPU time:   1.06s
+CPU time:   3.69s
 Done Putting
 Getting documents from server 100 times...
-CPU time:   0.15s
+CPU time:   0.08s
 Done!
 ```
 # Plans for the future
