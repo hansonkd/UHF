@@ -108,6 +108,20 @@ CPU time:   0.03s
 Done.
 ```
 
+MongoDB ConfirmedWriteMode
+
+```
+Now Inserting 1000 small docs..
+CPU time:   0.28s
+Done.
+Now Inserting 1000 big docs..
+CPU time:   1.90s
+Done.
+Now Searching...
+CPU time:   0.03s
+Done.
+```
+
 UFDB:
 
 ```
