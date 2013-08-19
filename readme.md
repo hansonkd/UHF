@@ -1,4 +1,4 @@
-# UFdb a reliable performant BSON database with ACID written in Haskell.
+# UFdb a reliable BSON database with ACID written in Haskell.
 
 
 UFdb started out as an experiment into working with binary structures as well as persitence in Haskell. The goal of the project is to be slim (the core server is less than 250 lines) as well as give decent performance. The server is built with threading in mind using Haskell's standard forkIO. Acidstate automatically handles thread access for us. Currently all lookups are naive.
