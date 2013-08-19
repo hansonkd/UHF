@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeFamilies, DeriveDataTypeable, TemplateHaskell, DeriveGeneric #-}
+{-# LANGUAGE TypeFamilies, DeriveDataTypeable, TemplateHaskell, DeriveGeneric, OverloadedStrings #-}
 module UFdb.Types where
 
 import           Data.Acid
@@ -8,6 +8,8 @@ import           Custom.IxSet ( Indexable(..), IxSet(..), ixFun, ixSet )
 import qualified Data.Bson as B
 import           Data.Bson.Generic
 import           GHC.Generics
+import qualified Data.Text as T
+
 
 $(deriveSafeCopy 0 'base ''B.Binary)
 $(deriveSafeCopy 0 'base ''B.Function)
@@ -29,9 +31,19 @@ instance ToBSON UFDocument
 instance FromBSON UFDocument
 $(deriveSafeCopy 0 'base ''UFDocument)
 
+-- | basically we just want to flatten  our document and then have our labels show their parents
+-- | e.g [child : [count : 4], someField : 9] becomes [ child.count : 4, somefield : 9 ]
+buildFieldIndex :: [B.Field] -> Maybe B.Label -> [B.Field]
+buildFieldIndex ([]) _                 = []
+buildFieldIndex (df@(fl B.:= (B.Doc docField)):docs) Nothing   = (buildFieldIndex docField (Just $ fl)) ++ (buildFieldIndex docs Nothing)
+buildFieldIndex (df@(fl B.:= (B.Doc docField)):docs) (Just pl) = (buildFieldIndex docField (Just $ T.concat [pl, ".", fl])) ++ 
+                                                (buildFieldIndex docs (Just pl))
+buildFieldIndex (field:docs) Nothing   = (field):(buildFieldIndex docs Nothing)
+buildFieldIndex (field:docs) (Just pl) = (field {B.label = T.concat [pl, ".", B.label field]}):(buildFieldIndex docs (Just pl))
+
 instance Indexable UFDocument where
      empty = ixSet [ ixFun $ \ufd -> [ documentKey ufd ]
-                   , ixFun $ \ufd -> documentData ufd -- | Index all the fields 
+                   , ixFun $ \ufd -> buildFieldIndex (documentData ufd) Nothing -- | Index all the fields 
                    ]
 
 data Database = Database { documents :: IxSet UFDocument }

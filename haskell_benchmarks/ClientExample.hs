@@ -26,32 +26,39 @@ import           Data.Typeable
 
 import           System.TimeIt
 
-data TestBsonData = TestBsonData { test20 :: [TestBsonData], test21 :: Int }
+data TestBsonData = TestBsonData { test20 :: Maybe TestBsonData, test21 :: Int }
   deriving (Generic, Show, Typeable, Eq)
 instance ToBSON TestBsonData
 instance FromBSON TestBsonData
 
 
 sampleData :: B.Document
-sampleData = toBSON $ TestBsonData [TestBsonData [] 0] 4
+sampleData = toBSON $ TestBsonData (Just $ TestBsonData Nothing 0) 4
 
-serializedPut x = ["operation" B.:= (B.Doc $ toBSON $ UFOperation UFPut $ (["payload" B.:= (B.Doc $ toBSON $ TestBsonData [TestBsonData [] x] x)]))]
+serializedPut x = ["operation" B.:= (B.Doc $ toBSON $ UFOperation UFPut $ (["payload" B.:= (B.Doc $ toBSON $ TestBsonData (Just $ TestBsonData Nothing (x*10)) x)]))]
 
-serializedGet = ["operation" B.:= (B.Doc $ toBSON $ UFOperation UFFilter (["parameters" B.:= B.Array []]))]
-
+serializedGet = ["operation" B.:= (B.Doc $ toBSON $ UFOperation UFFilter (["parameters" B.:= (B.Doc $
+                                         [ "$LT" B.:= (B.Doc $ 
+                                             [ "label" B.:= B.String "test20.test21"
+                                             , "value" B.:= B.Int32 100
+                                             ])
+                                         ])]))]
+                                         
 main :: IO ()
 main = do   args <- getArgs
+            print $ buildFieldIndex sampleData Nothing
             withSocketsDo $
              do addrinfos <- getAddrInfo Nothing (Just "localhost") (Just "5002")
                 let serveraddr = head addrinfos
                 sock <- socket (addrFamily serveraddr) Stream defaultProtocol
+                print serializedGet
                 if null args
                     then do putStrLn "Getting documents from server 1000 times..."
                             connect sock (addrAddress serveraddr)
-                            timeIt $ forM_ [0..1000] (\x -> do
+                            timeIt $ forM_ [0..1] (\x -> do
                                 sendAll sock $ runPut $ putDocument $ serializedGet
                                 resp <- recv sock (1024 * 1024)
-                                return ())
+                                print $ runGet getDocument resp)
                     else do let (arg:_) = args
                             if (arg == "local")
                                 then do putStrLn "Puting 1000 documents directly to database..."

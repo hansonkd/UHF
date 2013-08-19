@@ -50,5 +50,5 @@ handleOperation db c (UFOperation uft opts) = do
         UFPut    -> do insertNewDocument db =<< B.lookup "payload" opts
                        return $ UFResponse UFSuccess []
         UFGet    -> getById db =<< B.lookup "id" opts
-        UFFilter -> filterByString db =<< B.lookup "parameters" opts
+        UFFilter -> filterByFieldEval db =<< B.lookup "parameters" opts
     sendAll c $ buildResponse res

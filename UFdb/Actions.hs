@@ -13,6 +13,7 @@ import           Data.Binary.Put (runPut)
 import qualified Data.ByteString.Lazy as BS
 import           Data.Bson.Generic
 import           Data.Acid
+import           Data.Maybe (fromMaybe)
 
 addDocument :: B.ObjectId -> B.Document -> Update Database ()
 addDocument docKey docData
@@ -38,11 +39,41 @@ viewDocumentbyField field
             Just doc -> return $ UFResponse UFSuccess [doc]
             Nothing  -> return $ UFResponse UFFailure []
 
-viewDocumentsbyFieldEval :: [B.Value] -> Int -> Query Database UFResponse
+setOperation :: B.Label -> [B.Field] -> (IxSet.IxSet UFDocument -> IxSet.IxSet UFDocument -> IxSet.IxSet UFDocument) -> IxSet.IxSet UFDocument -> IxSet.IxSet UFDocument
+setOperation funcLabel funcDoc func documents = fromMaybe IxSet.empty $ do
+                            funcParams <- B.lookup funcLabel funcDoc :: Maybe [B.Field]
+                            arg1       <- B.lookup "arg1" funcParams :: Maybe [B.Field]
+                            arg2       <- B.lookup "arg2" funcParams :: Maybe [B.Field]
+                            Just (func (parseAll arg1 documents) (parseAll arg2 documents)) 
+
+filterByField :: B.Label -> [B.Field] -> (B.Field -> B.Field -> Bool) -> IxSet.IxSet UFDocument -> IxSet.IxSet UFDocument
+filterByField funcLabel funcDoc func documents = fromMaybe IxSet.empty $ do
+                            funcParams <- B.lookup funcLabel funcDoc :: Maybe [B.Field]
+                            label      <- B.lookup "label" funcParams
+                            val        <- B.look "value" funcParams
+                            Just (IxSet.filterByKey (\f -> (B.label f == label) && (func f (label B.:= val))) documents) 
+
+parseAll :: [B.Field] -> IxSet.IxSet UFDocument -> IxSet.IxSet UFDocument
+parseAll funcDoc documents = let setResults = parseSetOps funcDoc documents
+                                 ordResults = parseOrdOps funcDoc documents
+                             in foldr IxSet.union IxSet.empty [setResults, ordResults]
+
+parseSetOps :: [B.Field] -> IxSet.IxSet UFDocument -> IxSet.IxSet UFDocument
+parseSetOps funcDoc documents = let unionResults        = setOperation "$union" funcDoc IxSet.union documents
+                                    intersectionResults = setOperation "$intersection" funcDoc IxSet.intersection documents
+                                in foldr IxSet.union IxSet.empty [unionResults, intersectionResults]
+
+parseOrdOps :: [B.Field] -> IxSet.IxSet UFDocument -> IxSet.IxSet UFDocument
+parseOrdOps funcDoc documents = let ltResults = filterByField "$LT" funcDoc (<) documents
+                                    gtResults = filterByField "$GT" funcDoc (>) documents
+                                    eResults  = filterByField "$EQ" funcDoc (==) documents
+                                in foldr IxSet.union IxSet.empty [ltResults, gtResults, eResults]
+                                
+viewDocumentsbyFieldEval :: [B.Field] -> Int -> Query Database UFResponse
 viewDocumentsbyFieldEval func limit
     = do d@Database{..} <- ask
-         return $ UFResponse UFSuccess $ take limit $ IxSet.toList documents -- (IxSet.filterByKey (< field) documents)
-
+         return $ UFResponse UFSuccess $ take limit $ IxSet.toList $ parseAll func documents
+                                      
 $(makeAcidic ''Database ['addDocument, 'viewDocuments, 'viewDocumentbyField, 'viewDocumentsbyFieldEval, 'viewDocumentById])
 
 loadStateFromPath :: FilePath -> IO (AcidState Database)
@@ -57,8 +88,8 @@ getById :: AcidState Database -> B.ObjectId -> IO UFResponse
 getById database objid = do
     query database (ViewDocumentById objid)
 
-filterByString :: AcidState Database -> [B.Value] -> IO UFResponse
-filterByString database func = do
+filterByFieldEval :: AcidState Database -> [B.Field] -> IO UFResponse
+filterByFieldEval database func = do
     query database (ViewDocumentsbyFieldEval func 10)
 
 buildResponse :: UFResponse -> BS.ByteString
