@@ -27,7 +27,9 @@ import           UFdb.Actions
 import           System.Environment ( getArgs )
 import           Data.Typeable
 
-import           System.TimeIt
+import           Data.Time
+import           System.CPUTime
+import           Text.Printf
 
 data TestBsonData = TestBsonData { test20 :: Maybe TestBsonData, test21 :: Double, test22 :: [Double] }
   deriving (Generic, Show, Typeable, Eq)
@@ -51,6 +53,18 @@ serializedGetUnion = ["operation" B.:= (B.Doc $ toBSON $ UFOperation UFFilter ([
                                              , "arg2" B.:= B.Doc ["$GT" B.:= B.Doc ["label" B.:= B.String "test21", "value" B.:= B.Int32 5]]
                                              ])
                                          ])]))]
+timeIt :: IO a -> IO a
+timeIt opp = do
+    t1 <- getCPUTime
+    start <- getCurrentTime
+    r <- opp
+    stop <- getCurrentTime
+    t2 <- getCPUTime
+    let t :: Double
+        t = fromIntegral (t2-t1) * 1e-12
+    printf "CPU time: %6.2fs, User time: %s\n" t (show $ diffUTCTime stop start)
+    return r
+
 testRangeInsert :: [Double]
 testRangeInsert = [0..1000]
 
@@ -66,12 +80,12 @@ main = do   args <- getArgs
                 sock <- socket (addrFamily serveraddr) Stream defaultProtocol
                 connect sock (addrAddress serveraddr)
                 
-                putStrLn "Puting 1000 small documents to server individually..."
+                putStrLn "Putting 1000 small documents to server individually..."
                 timeIt $ forM_ testRangeInsert (\x -> do
                     sendAll sock $ runPut $ putDocument $ serializedPutSmall x
                     sendAll sock "\n<hfEnd>"
                     void $ recv sock 1024)
-                putStrLn "Done. \nPuting 1000 big documents to server individually..."
+                putStrLn "Done. \nPutting 1000 big documents to server individually..."
                 sock <- socket (addrFamily serveraddr) Stream defaultProtocol
                 connect sock (addrAddress serveraddr)
                 timeIt $ forM_ testRangeInsert (\x -> do

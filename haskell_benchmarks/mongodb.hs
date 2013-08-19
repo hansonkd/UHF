@@ -4,7 +4,6 @@ import qualified Data.Text as T
 import           Database.MongoDB
 import           Control.Monad.Trans (liftIO, MonadIO)
 import           Control.Monad
-import           Control.Monad.Trans.Control
 
 import           Control.Monad (forM_)
 import qualified Data.Bson as B
@@ -16,7 +15,10 @@ import           Data.Typeable
 import           Data.Binary.Put (runPut)
 import           Data.Bson.Binary
 
-import           System.TimeIt
+import           Data.Time
+import           System.CPUTime
+import           Text.Printf
+
 
 data TestBsonData = TestBsonData { test20 :: Maybe TestBsonData, test21 :: Double, test22 :: [Double] }
   deriving (Generic, Show, Typeable, Eq)
@@ -28,16 +30,28 @@ serializedPutSmall x = toBSON $ TestBsonData (Just $ TestBsonData Nothing (x*10)
 serializedPutBig x = toBSON $ TestBsonData (Just $ TestBsonData Nothing (x*10) [1..500]) x [1..500]
 
 
-testRangeInsert = [0..100]
-testRangeSearch = [0..10]
+testRangeInsert = [0..1000]
+testRangeSearch = [0..100]
+
+timeIt :: IO a -> IO a
+timeIt opp = do
+    t1 <- getCPUTime
+    start <- getCurrentTime
+    r <- opp
+    stop <- getCurrentTime
+    t2 <- getCPUTime
+    let t :: Double
+        t = fromIntegral (t2-t1) * 1e-12
+    printf "CPU time: %6.2fs, User time: %s\n" t (show $ diffUTCTime stop start)
+    return r
 
 main = do
     pipe <- runIOE $ connect (host "127.0.0.1")
     putStrLn "Now Clearing"
     void $ timeIt $ access pipe master "test" $ clearDocuments
-    putStrLn "Done. \nPuting 1000 small documents to server individually..."
+    putStrLn "Done. \nPutting 1000 small documents to server individually..."
     void $ timeIt $ access pipe master "test" $ forM_ testRangeInsert (\x -> insertSmallDocuments x)
-    putStrLn "Done. \nPuting 1000 big documents to server individually..."
+    putStrLn "Done. \nPutting 1000 big documents to server individually..."
     void $ timeIt $ access pipe master "test" $ forM_ testRangeInsert (\x -> insertBigDocuments x)
     putStrLn "Done. \nNow Searching over documents 100x..."
     void $ timeIt $ access pipe UnconfirmedWrites "test" $ forM_ testRangeSearch (\_ -> void searchDocuments)
