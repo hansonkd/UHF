@@ -137,7 +137,7 @@ CPU time:   0.08s
 Done!
 ```
 
-I believe due to lazy evaluation, if I add a single query, wait a second, then do my benchmark the speed is reduced further.
+I believe due to lazy evaluation, if I add a single query, wait a second, then do my benchmark the speed of filtering is reduced further.
 
 ```
 sendAll sock $ runPut $ putDocument $ serializedGetLT
