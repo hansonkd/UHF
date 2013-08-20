@@ -9,7 +9,7 @@ import qualified Data.Bson as B
 import           Data.Bson.Generic
 import           GHC.Generics
 import qualified Data.Text as T
-
+import qualified Data.Map as M
 
 $(deriveSafeCopy 0 'base ''B.Binary)
 $(deriveSafeCopy 0 'base ''B.Function)
@@ -33,17 +33,17 @@ $(deriveSafeCopy 0 'base ''UFDocument)
 
 -- | basically we just want to flatten  our document and then have our labels show their parents
 -- | e.g [child : [count : 4], someField : 9] becomes [ child.count : 4, somefield : 9 ]
-buildFieldIndex :: [B.Field] -> Maybe B.Label -> [B.Field]
-buildFieldIndex ([]) _                 = []
-buildFieldIndex (df@(fl B.:= (B.Doc docField)):docs) Nothing   = (buildFieldIndex docField (Just $ fl)) ++ (buildFieldIndex docs Nothing)
-buildFieldIndex (df@(fl B.:= (B.Doc docField)):docs) (Just pl) = (buildFieldIndex docField (Just $ T.concat [pl, ".", fl])) ++ 
+buildFieldIndex :: [B.Field] -> Maybe B.Label -> M.Map B.Label B.Value
+buildFieldIndex ([]) _                 = M.empty
+buildFieldIndex (df@(fl B.:= (B.Doc docField)):docs) Nothing   =  M.union (buildFieldIndex docField (Just $ fl)) (buildFieldIndex docs Nothing)
+buildFieldIndex (df@(fl B.:= (B.Doc docField)):docs) (Just pl) = M.union (buildFieldIndex docField (Just $ T.concat [pl, ".", fl]))
                                                 (buildFieldIndex docs (Just pl))
-buildFieldIndex (field:docs) Nothing   = (field):(buildFieldIndex docs Nothing)
-buildFieldIndex (field:docs) (Just pl) = (field {B.label = T.concat [pl, ".", B.label field]}):(buildFieldIndex docs (Just pl))
+buildFieldIndex (field:docs) Nothing   = M.insert (B.label field) (B.value field) (buildFieldIndex docs Nothing)
+buildFieldIndex (field:docs) (Just pl) = M.insert (T.concat [pl, ".", B.label field]) (B.value field) (buildFieldIndex docs (Just pl))
 
 instance Indexable UFDocument where
      empty = ixSet [ ixFun $ \ufd -> [ documentKey ufd ]
-                   , ixFun $ \ufd -> buildFieldIndex (documentData ufd) Nothing -- | Index all the fields 
+                   , ixFun $ \ufd -> [ buildFieldIndex (documentData ufd) Nothing ] -- | Index all the fields 
                    ]
 
 data Database = Database { documents :: IxSet UFDocument }
