@@ -14,8 +14,6 @@ import qualified Data.ByteString.Lazy as BS
 import           Data.Bson.Generic
 import           Data.Acid
 import           Data.Maybe (fromMaybe)
-import qualified Data.Map as M
-import           Data.Maybe (isJust)
 
 addDocument :: B.ObjectId -> B.Document -> Update Database ()
 addDocument docKey docData
@@ -48,16 +46,12 @@ setOperation funcLabel funcDoc func documents = fromMaybe IxSet.empty $ do
                             arg2       <- B.lookup "arg2" funcParams :: Maybe [B.Field]
                             Just (func (parseAll arg1 documents) (parseAll arg2 documents)) 
 
-filterByField :: B.Label -> [B.Field] -> (B.Value -> B.Value -> Bool) -> IxSet.IxSet UFDocument -> IxSet.IxSet UFDocument
+filterByField :: B.Label -> [B.Field] -> (B.Field -> B.Field -> Bool) -> IxSet.IxSet UFDocument -> IxSet.IxSet UFDocument
 filterByField funcLabel funcDoc func documents = fromMaybe IxSet.empty $ do
                             funcParams <- B.lookup funcLabel funcDoc :: Maybe [B.Field]
-                            label      <- B.lookup "label" funcParams :: Maybe B.Label
+                            label      <- B.lookup "label" funcParams
                             val        <- B.look "value" funcParams
-                            Just (IxSet.filterByKey (\fm -> isJust $ do
-                                                                v <- M.lookup label fm
-                                                                if (val == v)
-                                                                    then Nothing
-                                                                    else Just True) documents) 
+                            Just (IxSet.filterByKey (\f -> (B.label f == label) && (func f (label B.:= val))) documents) 
 
 parseAll :: [B.Field] -> IxSet.IxSet UFDocument -> IxSet.IxSet UFDocument
 parseAll funcDoc documents = let setResults = parseSetOps funcDoc documents

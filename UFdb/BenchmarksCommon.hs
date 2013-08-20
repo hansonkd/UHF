@@ -39,12 +39,11 @@ serializedGetLT    = ["operation" B.:= (B.Doc $ toBSON $ UFOperation UFFilter ([
                                              , "value" B.:= B.Int32 100
                                              ])
                                          ])]))]
-
-serializedGetUnion :: Double -> B.Document                                        
-serializedGetUnion x = ["operation" B.:= (B.Doc $ toBSON $ UFOperation UFFilter (["parameters" B.:= (B.Doc $
+                                         
+serializedGetUnion = ["operation" B.:= (B.Doc $ toBSON $ UFOperation UFFilter (["parameters" B.:= (B.Doc $
                                          [ "$union" B.:= (B.Doc $ 
-                                             [ "arg1" B.:= B.Doc ["$LT" B.:= B.Doc ["label" B.:= B.String "test20.test21", "value" B.:= B.Float (x * 20)]]
-                                             , "arg2" B.:= B.Doc ["$GT" B.:= B.Doc ["label" B.:= B.String "test21", "value" B.:= B.Float x]]
+                                             [ "arg1" B.:= B.Doc ["$LT" B.:= B.Doc ["label" B.:= B.String "test20.test21", "value" B.:= B.Int32 100]]
+                                             , "arg2" B.:= B.Doc ["$GT" B.:= B.Doc ["label" B.:= B.String "test21", "value" B.:= B.Int32 5]]
                                              ])
                                          ])]))]
 timeIt :: IO a -> IO a
