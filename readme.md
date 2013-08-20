@@ -92,7 +92,7 @@ Available filters are $LT, $GT, $EQ for comparing and $union and $intersection f
 
 # Benchmarks
 
-I included some basic benchmarks written in python and haskell comparing this database to MongoDB. So far insertion is comparable with MongoDB and is even 2x faster than Mongo when not in UnConfirmedWriteMode. Searching is very slow because it has to filter over all the documents in the database when it searches. I plan to fix this soon though.
+I included some basic benchmarks written in python and haskell comparing this database to MongoDB. So far we have to turn UnConfirmedWriteMode on in MongoDB to get speeds comparable to UFdb. Without it, UFdb is more than twice as fast.
 
 Here are some results. The big document consists of a nested document that is 2 deep with an array of length 500 on each level.
 
@@ -164,7 +164,7 @@ CPU time:   0.01s
 Done!
 ```
 
-So it 
+So it is pretty speedy.
 
 # Plans for the future
 
