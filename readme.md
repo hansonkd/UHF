@@ -3,7 +3,7 @@
 
 UFdb started out as an experiment into working with binary structures as well as persitence in Haskell. The goal of the project is to be slim (the core server is less than 250 lines) as well as give decent performance. The server is built with threading in mind using Haskell's standard forkIO. Acidstate automatically handles forking. 
 
-It is also has surprisingly good performance. In my simple benchmarks UFdb 2x faster than mongoDB with individual writes of small documents and twice as fast as mongodb for large documents. The lookup indexing is pretty naive at this point and could use some hacking to be more efficient.  Even with this in mind it is still 3x faster than mongodb with filtered results.
+It is also has surprisingly good performance. In my simple benchmarks, UFdb is about 2x faster than mongoDB with individual writes of small documents and twice as fast as mongodb for large documents. The lookup indexing is pretty naive at this point and could use some hacking to be more efficient.  Even with this in mind it is still 3x faster than mongodb with filtered results.
 
 
 # ACID 
