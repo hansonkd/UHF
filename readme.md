@@ -1,7 +1,9 @@
 # UFdb a reliable performant BSON database with ACID written in Haskell.
 
 
-UFdb started out as an experiment into working with binary structures as well as persitence in Haskell. The goal of the project is to be slim (the core server is less than 250 lines) as well as give decent performance. The server is built with threading in mind using Haskell's standard forkIO. Acidstate automatically handles thread access for us. Currently all lookups are naive.
+UFdb started out as an experiment into working with binary structures as well as persitence in Haskell. The goal of the project is to be slim (the core server is less than 250 lines) as well as give decent performance. The server is built with threading in mind using Haskell's standard forkIO. Acidstate automatically handles forking. 
+
+It is also has surprisingly good performance. It is about the same speed as mongodb for for single insertions of small documents and twice as fast as mongodb for large documents. The lookup indexing is pretty naive at this point and could use some hacking to be more efficient.  Even with this in mind it is still 3x faster than mongodb with filtered results.
 
 
 # ACID 
@@ -134,6 +136,35 @@ Getting documents from server 100 times...
 CPU time:   0.08s
 Done!
 ```
+
+I believe due to lazy evaluation, if I add a single query, wait a second, then do my benchmark the speed is reduced further.
+
+```
+sendAll sock $ runPut $ putDocument $ serializedGetLT
+void $ send sock "\n<hfEnd>"
+result <- recv sock (1024 * 1024)
+putStrLn $ "Results from query: "
+print $ runGet getDocument result
+        
+threadDelay $ 1000000
+putStrLn "Done Putting \nGetting documents from server 100 times..."
+timeIt $ forM_ testRangeSearch (\x -> do
+    sendAll sock $ runPut $ putDocument $ serializedGetUnion
+    void $ send sock "\n<hfEnd>"
+    void $ recv sock (1024 * 1024))
+sClose sock
+putStrLn "Done!"
+        
+```
+
+```
+Done Putting
+Getting documents from server 100 times...
+CPU time:   0.01s
+Done!
+```
+
+So it 
 
 # Plans for the future
 
