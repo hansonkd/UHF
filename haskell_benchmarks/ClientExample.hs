@@ -1,6 +1,4 @@
-{-# LANGUAGE DeriveGeneric          #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE DeriveDataTypeable     #-}
+{-# LANGUAGE OverloadedStrings      #-}
 
 module Client where
 
@@ -8,68 +6,18 @@ import           Data.Maybe (fromMaybe)
 import           Control.Monad (void, forM_)
 import           Network.Socket hiding (recv)
 import           Network.Socket.ByteString.Lazy (recv, sendAll)
-import qualified Network.Socket.ByteString as SBS
 
-import qualified Data.ByteString as BS
-import qualified Data.ByteString.Lazy as BL
-import qualified Data.ByteString.Lazy.Char8 as C
 import qualified Data.Bson as B
-import           Data.Bson.Generic
 
-import           GHC.Generics
 import           Data.Binary.Get (runGet)
 import           Data.Binary.Put (runPut)
 import           Data.Bson.Binary
 
-import           Data.Acid
-import           UFdb.Types
-import           UFdb.Actions
 import           System.Environment ( getArgs )
-import           Data.Typeable
 
-import           Data.Time
-import           System.CPUTime
-import           Text.Printf
+import           Control.Concurrent (threadDelay)
 
-data TestBsonData = TestBsonData { test20 :: Maybe TestBsonData, test21 :: Double, test22 :: [Double] }
-  deriving (Generic, Show, Typeable, Eq)
-instance ToBSON TestBsonData
-instance FromBSON TestBsonData
-
-serializedPutSmall x = ["operation" B.:= (B.Doc $ toBSON $ UFOperation UFPut $ (["payload" B.:= (B.Doc $ toBSON $ TestBsonData (Just $ TestBsonData Nothing (x*10) []) x [])]))]
-
-serializedPutBig x = ["operation" B.:= (B.Doc $ toBSON $ UFOperation UFPut $ (["payload" B.:= (B.Doc $ toBSON $ TestBsonData (Just $ TestBsonData Nothing (x*10) [1..500]) x [1..500])]))]
-
-serializedGetLT = ["operation" B.:= (B.Doc $ toBSON $ UFOperation UFFilter (["parameters" B.:= (B.Doc $
-                                         [ "$LT" B.:= (B.Doc $ 
-                                             [ "label" B.:= B.String "test20.test21"
-                                             , "value" B.:= B.Int32 100
-                                             ])
-                                         ])]))]
-                                         
-serializedGetUnion = ["operation" B.:= (B.Doc $ toBSON $ UFOperation UFFilter (["parameters" B.:= (B.Doc $
-                                         [ "$union" B.:= (B.Doc $ 
-                                             [ "arg1" B.:= B.Doc ["$LT" B.:= B.Doc ["label" B.:= B.String "test20.test21", "value" B.:= B.Int32 100]]
-                                             , "arg2" B.:= B.Doc ["$GT" B.:= B.Doc ["label" B.:= B.String "test21", "value" B.:= B.Int32 5]]
-                                             ])
-                                         ])]))]
-timeIt :: IO a -> IO a
-timeIt opp = do
-    t1 <- getCPUTime
-    start <- getCurrentTime
-    r <- opp
-    stop <- getCurrentTime
-    t2 <- getCPUTime
-    let t :: Double
-        t = fromIntegral (t2-t1) * 1e-12
-    printf "CPU time: %6.2fs, User time: %s\n" t (show $ diffUTCTime stop start)
-    return r
-
-testRangeInsert :: [Double]
-testRangeInsert = [0..1000]
-
-testRangeSearch :: [Double]
-testRangeSearch = [0..100]
+import           UFdb.BenchmarksCommon
 
 main :: IO ()
 main = do   args <- getArgs
@@ -92,17 +40,18 @@ main = do   args <- getArgs
                     sendAll sock $ runPut $ putDocument $ serializedPutBig x
                     void $ send sock "\n<hfEnd>"
                     void $ recv sock 1024)
-                putStrLn "Done Putting \nGetting documents from server 100 times..."
-                timeIt $ forM_ testRangeSearch (\x -> do
-                    sendAll sock $ runPut $ putDocument $ serializedGetUnion
-                    void $ send sock "\n<hfEnd>"
-                    void $ recv sock (1024 * 1024))
                 
-                sendAll sock $ runPut $ putDocument $ serializedGetUnion
+                sendAll sock $ runPut $ putDocument $ serializedGetLT
                 void $ send sock "\n<hfEnd>"
                 result <- recv sock (1024 * 1024)
                 putStrLn $ "Results from query: "
                 print $ runGet getDocument result
                 
+                threadDelay $ 1000000
+                putStrLn "Done Putting \nGetting documents from server 100 times..."
+                timeIt $ forM_ testRangeSearch (\x -> do
+                    sendAll sock $ runPut $ putDocument $ serializedGetUnion
+                    void $ send sock "\n<hfEnd>"
+                    void $ recv sock (1024 * 1024))
                 sClose sock
                 putStrLn "Done!"

@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, DeriveGeneric,  TypeOperators, DeriveDataTypeable #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 import qualified Data.Text as T
 import           Database.MongoDB
@@ -7,43 +7,11 @@ import           Control.Monad
 
 import           Control.Monad (forM_)
 import qualified Data.Bson as B
-import           Data.Bson.Generic
-
-import           GHC.Generics
-import           Data.Typeable
 
 import           Data.Binary.Put (runPut)
 import           Data.Bson.Binary
 
-import           Data.Time
-import           System.CPUTime
-import           Text.Printf
-
-
-data TestBsonData = TestBsonData { test20 :: Maybe TestBsonData, test21 :: Double, test22 :: [Double] }
-  deriving (Generic, Show, Typeable, Eq)
-instance ToBSON TestBsonData
-instance FromBSON TestBsonData
-
-serializedPutSmall x = toBSON $ TestBsonData (Just $ TestBsonData Nothing (x*10) []) x []
-
-serializedPutBig x = toBSON $ TestBsonData (Just $ TestBsonData Nothing (x*10) [1..500]) x [1..500]
-
-
-testRangeInsert = [0..1000]
-testRangeSearch = [0..100]
-
-timeIt :: IO a -> IO a
-timeIt opp = do
-    t1 <- getCPUTime
-    start <- getCurrentTime
-    r <- opp
-    stop <- getCurrentTime
-    t2 <- getCPUTime
-    let t :: Double
-        t = fromIntegral (t2-t1) * 1e-12
-    printf "CPU time: %6.2fs, User time: %s\n" t (show $ diffUTCTime stop start)
-    return r
+import           UFdb.BenchmarksCommon
 
 main = do
     pipe <- runIOE $ connect (host "127.0.0.1")
