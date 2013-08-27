@@ -92,5 +92,5 @@ filterByFieldEval :: AcidState Database -> [B.Field] -> IO UFResponse
 filterByFieldEval database func = do
     query database (ViewDocumentsbyFieldEval func 10)
 
-buildResponse :: UFResponse -> BS.ByteString
-buildResponse r = runPut $ putDocument $ [ "response" B.:= (B.Doc $ toBSON $ r) ]
+buildResponse :: UFResponse -> B.Document
+buildResponse r = [ "response" B.:= (B.Doc $ toBSON $ r) ]

@@ -18,4 +18,4 @@ cabal-version:       >=1.8
 executable UFdb
   main-is: Main.hs
   -- other-modules:       
-  build-depends:       base ==4.6.*, acid-state ==0.11.*, bson ==0.2.*, bson-generic ==0.0.*, binary ==0.5.*, bytestring ==0.10.*, network ==2.4.*, syb ==0.4.*, syb-with-class ==0.6.*, ixset ==1.0.*, containers ==0.5.*, safecopy ==0.8.*, template-haskell ==2.8.*, timeit ==1.0.*, mtl ==2.1.*, text ==0.11.*
+  build-depends:       base ==4.6.*, acid-state ==0.11.*, bson ==0.2.*, bson-generic ==0.0.*, binary ==0.7.1.*, bytestring ==0.10.*, network ==2.4.*, syb ==0.4.*, syb-with-class ==0.6.*, ixset ==1.0.*, containers ==0.5.*, safecopy ==0.8.*, template-haskell ==2.8.*, timeit ==1.0.*, mtl ==2.1.*, text ==0.11.*
