@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings      #-}
 
-module Client where
+module Main where
 
 import           Data.Maybe (fromMaybe)
 import           Control.Monad (void, forM_)
@@ -50,7 +50,7 @@ main = do   args <- getArgs
                 threadDelay $ 1000000
                 putStrLn "Done Putting \nGetting documents from server 100 times..."
                 timeIt $ forM_ testRangeSearch (\x -> do
-                    sendAll sock $ runPut $ putDocument $ serializedGetUnion
+                    sendAll sock $ runPut $ putDocument $ serializedGetUnion x
                     void $ send sock "\n<hfEnd>"
                     void $ recv sock (1024 * 1024))
                 sClose sock

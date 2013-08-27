@@ -22,10 +22,10 @@ main = do
     putStrLn "Done. \nPutting 1000 big documents to server individually..."
     void $ timeIt $ access pipe master "test" $ forM_ testRangeInsert (\x -> insertBigDocuments x)
     putStrLn "Done. \nNow Searching over documents 100x..."
-    void $ timeIt $ access pipe UnconfirmedWrites "test" $ forM_ testRangeSearch (\_ -> void searchDocuments)
+    void $ timeIt $ access pipe UnconfirmedWrites "test" $ forM_ testRangeSearch (\x -> searchDocuments x)
     putStrLn "Showing results of query:"
     result <- access pipe master "test" $ do
-                    docs <- searchDocuments
+                    docs <- searchDocuments 1
                     liftIO $ print $ length docs
     putStrLn "Done."
     close pipe
@@ -34,7 +34,8 @@ main = do
 -- | reduceFn = Javascript [] "function (key, values) {var total = 0; for (var i = 0; i < values.length; i++) {total += values[i];} return total;}"
 -- | forM_ [0..100] $ (\_ -> runMR' (mapReduce "db_test" mapFn reduceFn))
 
-serializedSelect = [ "test20.test21" B.:= (B.Doc $ [ "$lt" B.:= B.Int32 100]), "test21" B.:= (B.Doc $ [ "$gt" B.:= B.Int32 5]) ]
+serializedSelect x = [ "test20.test21" B.:= (B.Doc $ [ "$lt" B.:= B.Float (x * 20)]), "test21" B.:= (B.Doc $ [ "$gt" B.:= B.Float x]) ]
+
 
 clearDocuments = delete (select [] "db_test")
 
@@ -42,4 +43,4 @@ insertSmallDocuments x = insert "db_test" $ serializedPutSmall x
 
 insertBigDocuments x = insert "db_test" $ serializedPutBig x
 
-searchDocuments = nextN 10 =<< find (select serializedSelect "db_test") {sort = []}
+searchDocuments x = nextN 10 =<< find (select (serializedSelect x) "db_test") {sort = []}
