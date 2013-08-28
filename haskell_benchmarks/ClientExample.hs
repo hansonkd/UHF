@@ -2,52 +2,59 @@
 
 module Main where
 
+
+
 import           Data.Maybe (fromMaybe)
 import           Control.Monad (void, forM_)
-import           Network.Socket hiding (recv)
-import           Network.Socket.ByteString.Lazy (recv, sendAll)
+import           Control.Monad.Trans (liftIO, MonadIO)
 
 import qualified Data.Bson as B
 
 import           Data.Binary.Get (runGet)
 import           Data.Binary.Put (runPut)
 import           Data.Bson.Binary
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as BL
 
-import           System.Environment ( getArgs )
+import           Data.Conduit
+import           Data.Conduit.Network
 
-import           Control.Concurrent (threadDelay)
+import           Codec.Compression.Zlib
 
 import           UFdb.BenchmarksCommon
 
 main :: IO ()
-main = do   args <- getArgs
-            withSocketsDo $
-             do addrinfos <- getAddrInfo Nothing (Just "localhost") (Just "5002")
-                let serveraddr = head addrinfos
-                
-                sock <- socket (addrFamily serveraddr) Stream defaultProtocol
-                connect sock (addrAddress serveraddr)
-                
-                putStrLn "Putting 1000 small documents to server individually..."
-                timeIt $ forM_ testRangeInsert (\x -> do
-                    sendAll sock $ runPut $ putDocument $ serializedPutSmall x
-                    void $ recv sock (1024*1024))
-                putStrLn "Done. \nPutting 1000 big documents to server individually..."
-                sock <- socket (addrFamily serveraddr) Stream defaultProtocol
-                connect sock (addrAddress serveraddr)
-                timeIt $ forM_ testRangeInsert (\x -> do
-                    sendAll sock $ runPut $ putDocument $ serializedPutBig x
-                    void $ recv sock (1024*1024))
-                
-                sendAll sock $ runPut $ putDocument $ serializedGetLT
-                result <- recv sock (1024 * 1024)
-                putStrLn $ "Results from query: "
-                print $ runGet getDocument result
-                
-                threadDelay $ 1000000
-                putStrLn "Done Putting \nGetting documents from server 100 times..."
-                timeIt $ forM_ testRangeSearch (\x -> do
-                    sendAll sock $ runPut $ putDocument $ serializedGetUnion x
-                    void $ recv sock (1024 * 1024))
-                sClose sock
-                putStrLn "Done!"
+main = do
+    runTCPClient (clientSettings 5002 "127.0.0.1") clientApp
+
+clientApp :: (MonadIO m, MonadUnsafeIO m, MonadThrow m) => Application m
+clientApp appData = let src = appSource appData
+                        sink = appSink appData
+                    in src $= benchmarkConduit $$ sink
+                    --(decompress defaultWindowBits) $=
+
+
+compressor = compressWith (defaultCompressParams {compressLevel = bestSpeed})
+benchmarkConduit :: MonadIO m => Conduit B.ByteString m (B.ByteString)
+benchmarkConduit = do
+
+    liftIO $ putStrLn "Putting 1000 small documents to server individually..."
+    timeIt $ forM_ testRangeInsert (\x -> do
+        yield $ BL.toStrict $ compress $ runPut $ putDocument $ serializedPutSmall x
+        void $ await)
+
+    liftIO $ putStrLn "Done. \nPutting 1000 big documents to server individually..."
+    timeIt $ forM_ testRangeInsert (\x -> do
+        yield $ BL.toStrict $ compress $ runPut $ putDocument $ serializedPutBig x
+        void $ await)
+    
+    yield $ BL.toStrict $ compress $ runPut $ putDocument $ serializedGetLT
+    result <- await
+    liftIO $ putStrLn $ "Results from query: "
+    liftIO $ print $ result
+    
+    liftIO $ putStrLn "Done Putting \nGetting documents from server 100 times..."
+    timeIt $ forM_ testRangeSearch (\x -> do
+        yield $ BL.toStrict $ compress $ runPut $ putDocument $ serializedGetUnion x
+        void $ await)
+    liftIO $ putStrLn "Done!"

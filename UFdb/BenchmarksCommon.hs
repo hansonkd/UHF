@@ -18,6 +18,8 @@ import           System.CPUTime
 import           Text.Printf
 import           System.TimeIt
 
+import           Control.Monad.Trans (liftIO, MonadIO)
+
 data TestBsonData = TestBsonData { test20 :: Maybe TestBsonData, test21 :: Double, test22 :: [Double] }
   deriving (Generic, Show, Typeable, Eq)
 instance ToBSON TestBsonData
@@ -47,16 +49,16 @@ serializedGetUnion x = ["operation" B.:= (B.Doc $ toBSON $ UFOperation UFFilter 
                                              , "arg2" B.:= B.Doc ["$GT" B.:= B.Doc ["label" B.:= B.String "test21", "value" B.:= B.Float x]]
                                              ])
                                          ])]))]
-timeIt :: IO a -> IO a
+timeIt :: MonadIO m => m a -> m a
 timeIt opp = do
-    t1 <- getCPUTime
-    start <- getCurrentTime
+    t1 <- liftIO $ getCPUTime
+    start <- liftIO $ getCurrentTime
     r <- opp
-    stop <- getCurrentTime
-    t2 <- getCPUTime
+    stop <- liftIO $ getCurrentTime
+    t2 <- liftIO $ getCPUTime
     let t :: Double
         t = fromIntegral (t2-t1) * 1e-12
-    printf "CPU time: %6.2fs, User time: %s\n" t (show $ diffUTCTime stop start)
+    liftIO $ printf "CPU time: %6.2fs, User time: %s\n" t (show $ diffUTCTime stop start)
     return r
 
 testRangeInsert :: [Double]

@@ -24,6 +24,8 @@ import           Data.Conduit
 import           Data.Conduit.Network
 import           Data.Conduit.List as CL
 
+import           Codec.Compression.Zlib
+
 
 
 
@@ -38,15 +40,15 @@ main = do
 
 listener :: AcidState Database -> Application IO
 listener db appData = let src = appSource appData
-                      sink = appSink appData
-                  in src $= (documentConvert emptyGet) $= (operationConduit db) $$ sink
+                          sink = appSink appData
+                      in src $= (documentConvert emptyGet) $= (operationConduit db) $$ sink
         
 
 
 documentConvert :: MonadIO m => Decoder B.Document -> Conduit BS.ByteString m B.Document
 documentConvert built = await >>= maybe (return ()) handleConvert
     where handleConvert msg = do
-                        let newMsg = pushChunk built msg
+                        let newMsg = pushChunk built (BSL.toStrict $ decompress $ BSL.fromStrict msg)
                         case newMsg of
                                 Done a _ doc -> do yield doc
                                                    documentConvert $ pushChunk emptyGet a
