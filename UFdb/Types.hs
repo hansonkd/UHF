@@ -7,9 +7,10 @@ import           Data.Typeable (Typeable)
 import           Custom.IxSet ( Indexable(..), IxSet(..), ixFun, ixSet )
 import qualified Data.Bson as B
 import           Data.Bson.Generic
+import qualified Data.ByteString as BS
 import           GHC.Generics
 import qualified Data.Text as T
-
+import qualified Data.Map.Strict as M
 
 $(deriveSafeCopy 0 'base ''B.Binary)
 $(deriveSafeCopy 0 'base ''B.Function)
@@ -46,7 +47,10 @@ instance Indexable UFDocument where
                    , ixFun $ \ufd -> buildFieldIndex (documentData ufd) Nothing -- | Index all the fields 
                    ]
 
-data Database = Database { documents :: IxSet UFDocument }
+data ParsedDatabase = ParsedDatabase { parsedDocuments :: IxSet UFDocument }
+    deriving (Typeable)
+    
+data Database = Database { documents :: !(M.Map B.ObjectId BS.ByteString) }
     deriving (Typeable)
 
 $(deriveSafeCopy 0 'base ''Database)
@@ -66,7 +70,7 @@ data UFResponseType = UFSuccess | UFFailure
 instance ToBSON UFResponseType
 instance FromBSON UFResponseType
 
-data UFResponse = UFResponse { responseType :: UFResponseType, responseContent :: [UFDocument] }
+data UFResponse = UFResponse { responseType :: UFResponseType, responseContent :: [B.Binary] }
   deriving (Generic, Show, Typeable, Eq)
 instance ToBSON UFResponse
 instance FromBSON UFResponse

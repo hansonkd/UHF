@@ -36,7 +36,6 @@ main = do
 
 serializedSelect x = [ "test20.test21" B.:= (B.Doc $ [ "$lt" B.:= B.Float (x * 20)]), "test21" B.:= (B.Doc $ [ "$gt" B.:= B.Float x]) ]
 
-
 clearDocuments = delete (select [] "db_test")
 
 insertSmallDocuments x = insert "db_test" $ serializedPutSmall x

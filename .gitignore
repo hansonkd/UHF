@@ -5,3 +5,10 @@ testDB
 *.o
 *.hi
 dist
+*.p_o
+*.prof
+server
+*.log
+*.old
+
+server
