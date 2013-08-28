@@ -38,8 +38,8 @@ serializedSelect x = [ "test20.test21" B.:= (B.Doc $ [ "$lt" B.:= B.Float (x * 2
 
 clearDocuments = delete (select [] "db_test")
 
-insertSmallDocuments x = insert "db_test" $ serializedPutSmall x
+insertSmallDocuments x = insert "db_test" $ littleDoc x
 
-insertBigDocuments x = insert "db_test" $ serializedPutBig x
+insertBigDocuments x = insert "db_test" $ bigDoc x
 
 searchDocuments x = nextN 10 =<< find (select (serializedSelect x) "db_test") {sort = []}

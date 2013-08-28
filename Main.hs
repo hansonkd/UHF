@@ -6,7 +6,7 @@ module Main where
 import           UFdb.Types
 import           UFdb.Actions
 
-import           Control.Monad.Trans (liftIO, MonadIO)
+import           Control.Monad.Trans (liftIO, MonadIO, lift)
 import           Data.Acid
 import           Data.Maybe (fromMaybe)
 import qualified Data.Bson as B
@@ -14,8 +14,6 @@ import           Data.Bson.Generic
 import           Data.Bson.Binary
 import           Data.Binary.Get
 import           Data.Binary.Put
-
-import qualified Custom.IxSet as IxSet
 
 import           Data.ByteString.Char8 as BS
 import           Data.ByteString.Lazy as BSL
@@ -29,6 +27,7 @@ import           Data.Conduit.List as CL
 import           Codec.Compression.Zlib
 import           Control.Concurrent.STM
 
+import           Control.Monad.Reader
 
 
 emptyGet :: Decoder B.Document
@@ -42,15 +41,16 @@ main = do
     startCache <- (constructStartCache db)
     tvi        <- newTVarIO startCache
     BS.putStrLn "Launching server..."
-    runTCPServer (serverSettings 5002 "*4") $ listener db tvi
+    flip runReaderT (ServerData db tvi) $ do
+                runTCPServer (serverSettings 5002 "*4") $ listener
     closeAcidState db
 
-listener :: AcidState Database -> TVar (IxSet.IxSet UFDocument) -> Application IO
-listener db tvi appData = src $= (documentConvert emptyGet) $= (operationConduit db tvi) $$ sink
+listener :: Application ServerApplication
+listener appData = src $= (documentConvert emptyGet) $= operationConduit $$ sink
         where src  = appSource appData
               sink = appSink appData
 
-documentConvert :: MonadIO m => Decoder B.Document -> Conduit BS.ByteString m B.Document
+documentConvert :: Decoder B.Document -> Conduit BS.ByteString ServerApplication B.Document
 documentConvert built = await >>= maybe (return ()) handleConvert
     where handleConvert msg = do
                         let newMsg = pushChunks built $ decompress $ BSL.fromStrict msg
@@ -63,18 +63,16 @@ documentConvert built = await >>= maybe (return ()) handleConvert
                                     yield $ buildResponse $ UFResponse UFFailure []
                                     documentConvert $ pushChunk emptyGet a
             
-operationConduit :: MonadIO m => AcidState Database -> TVar (IxSet.IxSet UFDocument) -> Conduit B.Document m BS.ByteString
-operationConduit db tvi = awaitForever handleOperation
+operationConduit :: Conduit B.Document ServerApplication BS.ByteString
+operationConduit = awaitForever handleOperation
         where handleOperation doc = case (B.lookup "operation" doc) of
                 Just (UFOperation uft opts) -> do
-                    indexed <- liftIO $ readTVarIO tvi
-                    bs_response <- liftIO $ do
+                    bs_response <- lift $ do
                         res <- case uft of
-                            UFPut    -> do new_index <- (\x -> insertNewDocument db (BSL.toStrict $ runPut $ putDocument x) indexed x) =<< B.lookup "payload" opts
-                                           liftIO $ atomically $ writeTVar tvi new_index
+                            UFPut    -> do new_index <- (\x -> insertNewDocument x) =<< B.lookup "payload" opts
                                            return $ UFResponse UFSuccess []
-                            UFGet    -> getById db =<< B.lookup "id" opts
-                            UFFilter -> filterByFieldEval db indexed =<< B.lookup "parameters" opts
+                            UFGet    -> getById =<< B.lookup "id" opts
+                            UFFilter -> filterByFieldEval =<< B.lookup "parameters" opts
                         return $ BSL.toStrict $ runPut $ putDocument $ buildResponse res
                     yield bs_response
                 Nothing   -> liftIO $ print "Error: no operation found."

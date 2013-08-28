@@ -12,6 +12,9 @@ import           Data.Typeable
 import qualified Data.ByteString.Lazy.Char8 as C
 import qualified Data.Bson as B
 import           Data.Bson.Generic
+import           Data.Binary.Put
+import           Data.Bson.Binary
+
 
 import           Data.Time
 import           System.CPUTime
@@ -29,7 +32,9 @@ instance FromBSON TestBsonData
 littleDoc x = TestBsonData (Just $ TestBsonData Nothing (x*10) []) x []
 bigDoc    x = TestBsonData (Just $ TestBsonData Nothing (x*10) [0..500]) x [0..500]
 
-convertToPutOperation x = ["operation" B.:= (B.Doc $ toBSON $ UFOperation UFPut $ (["payload" B.:= (B.Doc $ toBSON $ x)]))]
+convertToValue x = B.Bin $ B.Binary $ C.toStrict $ runPut $ putDocument x
+
+convertToPutOperation x = ["operation" B.:= (B.Doc $ toBSON $ UFOperation UFPut $ (["payload" B.:= (convertToValue $ toBSON x)]))]
 
 serializedPutSmall x = convertToPutOperation $ littleDoc x
 
