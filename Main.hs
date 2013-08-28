@@ -24,31 +24,38 @@ import           Data.Conduit
 import           Data.Conduit.Network
 import           Data.Conduit.List as CL
 
+
+
+
+emptyGet :: Decoder B.Document
+emptyGet = runGetIncremental getDocument
+
 main :: IO ()
 main = do
     db   <- loadStateFromPath "testDB/"
-    runTCPServer (serverSettings 5002 "*4") $ loop db
+    runTCPServer (serverSettings 5002 "*4") $ listener db
     closeAcidState db
 
-
-loop :: AcidState Database -> Application IO
-loop db appData = let src = appSource appData
+listener :: AcidState Database -> Application IO
+listener db appData = let src = appSource appData
                       sink = appSink appData
-                  in src $= (documentConvert $ runGetIncremental getDocument) $= (handleOperation db) $$ sink
+                  in src $= (documentConvert emptyGet) $= (operationConduit db) $$ sink
         
 
-documentBuilde
+
 documentConvert :: MonadIO m => Decoder B.Document -> Conduit BS.ByteString m B.Document
-documentConvert built = case built of
-                                Done _ _ doc -> do yield doc
-                                                   documentConvert $ runGetIncremental getDocument
-                                Partial _    -> awaitForever $ (\msg -> documentConvert (pushChunk built msg))
-                                Fail _ _ err -> do
+documentConvert built = await >>= maybe (return ()) handleConvert
+    where handleConvert msg = do
+                        let newMsg = pushChunk built msg
+                        case newMsg of
+                                Done a _ doc -> do yield doc
+                                                   documentConvert $ pushChunk emptyGet a
+                                Partial _    -> documentConvert (pushChunk built msg)
+                                Fail a _ err -> do
                                     liftIO $ print err
                                     yield (buildResponse $ UFResponse UFFailure [])
-                                    documentConvert $ runGetIncremental getDocument
-
-
+                                    documentConvert $ pushChunk emptyGet a
+            
 operationConduit :: MonadIO m => AcidState Database -> Conduit B.Document m BS.ByteString
 operationConduit db = awaitForever handleOperation
     where handleOperation doc = case (B.lookup "operation" doc) of
