@@ -7,8 +7,8 @@ import           Control.Monad.Reader ( ask )
 import qualified Data.Bson as B
 import           UFdb.Types
 import           Data.Bson.Binary
-import           Data.Binary.Put (runPut)
-import           Data.Binary.Get (runGet)
+import           Data.Binary.Get
+import           Data.Binary.Put
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BL
 import           Data.Bson.Generic
@@ -21,6 +21,11 @@ import           Control.Concurrent.STM
 import           Data.Set       (Set)
 import qualified Data.Set       as Set
 import           System.IO.Unsafe (unsafePerformIO)
+import           Data.Conduit
+
+emptyGet :: Decoder B.Document
+emptyGet = runGetIncremental getDocument
+
 
 buildIndex :: B.ObjectId -> BS.ByteString -> DocumentIndex -> DocumentIndex
 buildIndex objId serialized docIndex@DocumentIndex{..} = DocumentIndex $ newFieldIndex
@@ -126,3 +131,16 @@ constructStartCache db = do
     
 buildResponse :: UFResponse -> B.Document
 buildResponse r = [ "response" B.:= (B.Doc $ toBSON $ r) ]
+
+documentConvert :: Decoder B.Document -> Conduit BS.ByteString ServerApplication B.Document
+documentConvert built = await >>= maybe (return ()) handleConvert
+    where handleConvert msg = do
+                        let newMsg = pushChunk built msg
+                        case newMsg of
+                                Done a n doc -> do yield doc
+                                                   documentConvert $ pushChunk emptyGet a
+                                Partial _    -> documentConvert newMsg
+                                Fail a _ err -> do
+                                    liftIO $ print err
+                                    yield $ buildResponse $ UFResponse UFFailure []
+                                    documentConvert $ pushChunk emptyGet a

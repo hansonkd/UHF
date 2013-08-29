@@ -6,6 +6,7 @@ module Main where
 import           UFdb.Types
 import           UFdb.Actions
 
+import           Control.Concurrent (forkIO)
 import           Control.Monad.Trans (liftIO, MonadIO, lift)
 import           Data.Acid
 import           Data.Maybe (fromMaybe)
@@ -29,10 +30,6 @@ import           Control.Concurrent.STM
 
 import           Control.Monad.Reader
 
-
-emptyGet :: Decoder B.Document
-emptyGet = runGetIncremental getDocument
-
 main :: IO ()
 main = do
     BS.putStrLn "Loading database..."
@@ -49,19 +46,6 @@ listener :: Application ServerApplication
 listener appData = src $= (documentConvert emptyGet) $= operationConduit $$ sink
         where src  = appSource appData
               sink = appSink appData
-
-documentConvert :: Decoder B.Document -> Conduit BS.ByteString ServerApplication B.Document
-documentConvert built = await >>= maybe (return ()) handleConvert
-    where handleConvert msg = do
-                        let newMsg = pushChunk built msg
-                        case newMsg of
-                                Done a n doc -> do yield doc
-                                                   documentConvert $ pushChunk emptyGet a
-                                Partial _    -> documentConvert newMsg
-                                Fail a _ err -> do
-                                    liftIO $ print err
-                                    yield $ buildResponse $ UFResponse UFFailure []
-                                    documentConvert $ pushChunk emptyGet a
             
 operationConduit :: Conduit B.Document ServerApplication BS.ByteString
 operationConduit = awaitForever handleOperation
@@ -69,12 +53,14 @@ operationConduit = awaitForever handleOperation
                 Just (UFOperation uft opts) -> do
                     bs_response <- lift $ do
                         res <- case uft of
-                            UFPut    -> do new_index <- (\x -> insertNewDocument x) =<< B.lookup "payload" opts
+                            UFPut    -> do if (fromMaybe False $ B.lookup "unconfirmedWrite" opts)
+                                              then do curServer <- ask
+                                                      pl        <- B.lookup "payload" opts
+                                                      void $ liftIO $ forkIO $ void $ flip runReaderT curServer $ insertNewDocument pl
+                                              else insertNewDocument =<< B.lookup "payload" opts
                                            return $ UFResponse UFSuccess []
                             UFGet    -> getById =<< B.lookup "id" opts
                             UFFilter -> filterByFieldEval =<< B.lookup "parameters" opts
                         return $ BSL.toStrict $ runPut $ putDocument $ buildResponse res
-                    if (fromMaybe False $ B.lookup "unconfirmedWrite" opts)
-                      then return ()
-                      else yield bs_response
+                    yield bs_response
                 Nothing   -> liftIO $ print "Error: no operation found."

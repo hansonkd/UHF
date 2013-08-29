@@ -37,7 +37,7 @@ bigDoc x = baseDoc [0..500] x
 
 convertToValue x = B.Bin $ B.Binary $ CL.toStrict $ runPut $ putDocument x
 
-convertToPutOperation x = ["operation" B.:= (B.Doc $ toBSON $ UFOperation UFPut $ (["payload" B.:= (convertToValue $ x), "unconfirmed" B.:= (B.Bool True)]))]
+convertToPutOperation x = ["operation" B.:= (B.Doc $ toBSON $ UFOperation UFPut $ (["payload" B.:= (convertToValue $ x), "unconfirmedWrite" B.:= (B.Bool True)]))]
 
 serializedPutSmall x = convertToPutOperation $ littleDoc x
 
