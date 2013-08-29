@@ -53,7 +53,7 @@ listener appData = src $= (documentConvert emptyGet) $= operationConduit $$ sink
 documentConvert :: Decoder B.Document -> Conduit BS.ByteString ServerApplication B.Document
 documentConvert built = await >>= maybe (return ()) handleConvert
     where handleConvert msg = do
-                        let newMsg = pushChunks built $ decompress $ BSL.fromStrict msg
+                        let newMsg = pushChunk built msg
                         case newMsg of
                                 Done a n doc -> do yield doc
                                                    documentConvert $ pushChunk emptyGet a
@@ -74,5 +74,7 @@ operationConduit = awaitForever handleOperation
                             UFGet    -> getById =<< B.lookup "id" opts
                             UFFilter -> filterByFieldEval =<< B.lookup "parameters" opts
                         return $ BSL.toStrict $ runPut $ putDocument $ buildResponse res
-                    yield bs_response
+                    if (fromMaybe False $ B.lookup "unconfirmedWrite" opts)
+                      then return ()
+                      else yield bs_response
                 Nothing   -> liftIO $ print "Error: no operation found."

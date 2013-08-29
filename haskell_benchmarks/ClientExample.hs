@@ -34,23 +34,21 @@ clientApp appData = let src = appSource appData
                     --(decompress defaultWindowBits) $=
 
 
-compressor = compressWith (defaultCompressParams)
+compressor = compressWith defaultCompressParams { compressLevel = bestSpeed }
 
 benchmarkConduit :: MonadIO m => Conduit B.ByteString m (B.ByteString)
 benchmarkConduit = do
 
     liftIO $ putStrLn "Putting 1000 small documents to server individually..."
     timeIt $ forM_ testRangeInsert (\x -> do
-        yield $ BL.toStrict $ compress $ runPut $ putDocument $ serializedPutSmall x
-        void $ await)
+        yield $ BL.toStrict $ runPut $ putDocument $ serializedPutSmall x)
 
     liftIO $ putStrLn "Done. \nPutting 1000 big documents to server individually..."
     timeIt $ forM_ testRangeInsert (\x -> do
-        yield $ BL.toStrict $ compress $ runPut $ putDocument $ serializedPutBig x
-        void $ await)
+        yield $ BL.toStrict $ runPut $ putDocument $ serializedPutBig x)
     
     liftIO $ putStrLn "Done Putting \nGetting documents from server 100 times..."
     timeIt $ forM_ testRangeSearch (\x -> do
-        yield $ BL.toStrict $ compress $ runPut $ putDocument $ serializedGetUnion x
+        yield $ BL.toStrict $ runPut $ putDocument $ serializedGetUnion x
         void $ await)
     liftIO $ putStrLn "Done!"
