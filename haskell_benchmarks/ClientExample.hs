@@ -7,7 +7,7 @@ module Main where
 import           Data.Maybe (fromMaybe)
 import           Control.Monad (void, forM_)
 import           Control.Monad.Trans (liftIO, MonadIO)
-import           Control.Concurrent (threadDelay)
+
 import qualified Data.Bson as B
 
 import           Data.Binary.Get (runGet)
@@ -44,17 +44,13 @@ benchmarkConduit = do
         yield $ BL.toStrict $ runPut $ putDocument $ serializedPutSmall x
         void $ await)
 
-    liftIO $ threadDelay 1000000
-
     liftIO $ putStrLn "Done. \nPutting 1000 big documents to server individually..."
     timeIt $ forM_ testRangeInsert (\x -> do
         yield $ BL.toStrict $ runPut $ putDocument $ serializedPutBig x
         void $ await)
     
-    liftIO $ threadDelay 1000000
-
     liftIO $ putStrLn "Done Putting \nGetting documents from server 100 times..."
     timeIt $ forM_ testRangeSearch (\x -> do
         yield $ BL.toStrict $ runPut $ putDocument $ serializedGetUnion x
-        void $ await) --await >>= (liftIO . print))
+        await >>= (liftIO . print))
     liftIO $ putStrLn "Done!"
