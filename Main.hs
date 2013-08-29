@@ -6,7 +6,6 @@ module Main where
 import           UFdb.Types
 import           UFdb.Actions
 
-import           Control.Concurrent (forkIO)
 import           Control.Monad.Trans (liftIO, MonadIO, lift)
 import           Data.Acid
 import           Data.Maybe (fromMaybe)
@@ -35,7 +34,7 @@ main = do
     BS.putStrLn "Loading database..."
     db         <- loadStateFromPath "testDB/"
     BS.putStrLn "Building cache..."
-    startCache <- (constructStartCache db)
+    startCache <- constructStartCache db
     tvi        <- newTVarIO startCache
     BS.putStrLn "Launching server..."
     flip runReaderT (ServerData db tvi) $ do
@@ -53,14 +52,12 @@ operationConduit = awaitForever handleOperation
                 Just (UFOperation uft opts) -> do
                     bs_response <- lift $ do
                         res <- case uft of
-                            UFPut    -> do if (fromMaybe False $ B.lookup "unconfirmedWrite" opts)
-                                              then do curServer <- ask
-                                                      pl        <- B.lookup "payload" opts
-                                                      void $ liftIO $ forkIO $ void $ flip runReaderT curServer $ insertNewDocument pl
-                                              else insertNewDocument =<< B.lookup "payload" opts
+                            UFPut    -> do new_index <- (\x -> insertNewDocument x) =<< B.lookup "payload" opts
                                            return $ UFResponse UFSuccess []
                             UFGet    -> getById =<< B.lookup "id" opts
                             UFFilter -> filterByFieldEval =<< B.lookup "parameters" opts
                         return $ BSL.toStrict $ runPut $ putDocument $ buildResponse res
-                    yield bs_response
+                    if (fromMaybe False $ B.lookup "unconfirmedWrite" opts)
+                      then return ()
+                      else yield bs_response
                 Nothing   -> liftIO $ print "Error: no operation found."

@@ -38,19 +38,28 @@ compressor = compressWith defaultCompressParams { compressLevel = bestSpeed }
 
 benchmarkConduit :: MonadIO m => Conduit B.ByteString m (B.ByteString)
 benchmarkConduit = do
+    
+    liftIO $ print $ BL.length $ runPut $ putDocument $ serializedPutBig 500
 
     liftIO $ putStrLn "Putting 1000 small documents to server individually..."
     timeIt $ forM_ testRangeInsert (\x -> do
         yield $ BL.toStrict $ runPut $ putDocument $ serializedPutSmall x
         void $ await)
+    
+    liftIO $ putStrLn "Push enter to continue"
+    _ <- liftIO $ getLine
 
     liftIO $ putStrLn "Done. \nPutting 1000 big documents to server individually..."
     timeIt $ forM_ testRangeInsert (\x -> do
         yield $ BL.toStrict $ runPut $ putDocument $ serializedPutBig x
         void $ await)
     
+    liftIO $ putStrLn "Push enter to continue"
+    _ <- liftIO $ getLine
+
     liftIO $ putStrLn "Done Putting \nGetting documents from server 100 times..."
     timeIt $ forM_ testRangeSearch (\x -> do
         yield $ BL.toStrict $ runPut $ putDocument $ serializedGetUnion x
-        await >>= (liftIO . print))
+        void $ await) --await >>= (liftIO . print))
+        
     liftIO $ putStrLn "Done!"

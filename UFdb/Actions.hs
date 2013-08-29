@@ -14,18 +14,13 @@ import qualified Data.ByteString.Lazy as BL
 import           Data.Bson.Generic
 import           Data.Acid
 import           Data.Maybe (fromMaybe, catMaybes)
-import qualified Data.Map.Strict as M
-import qualified Data.Map as ML
+import qualified Data.Map as M
 import           Control.Monad.Reader
 import           Control.Concurrent.STM
 import           Data.Set       (Set)
 import qualified Data.Set       as Set
 import           System.IO.Unsafe (unsafePerformIO)
 import           Data.Conduit
-
-emptyGet :: Decoder B.Document
-emptyGet = runGetIncremental getDocument
-
 
 buildIndex :: B.ObjectId -> BS.ByteString -> DocumentIndex -> DocumentIndex
 buildIndex objId serialized docIndex@DocumentIndex{..} = DocumentIndex $ newFieldIndex
@@ -45,7 +40,7 @@ unwrapDB = do d@Database{..} <- ask
 viewDocuments :: Int -> Query Database UFResponse
 viewDocuments limit
     = do d@Database{..} <- ask
-         return $ UFResponse UFSuccess $ fmap (B.Binary) $ take limit $ M.elems documents
+         return $ UFResponse UFSuccess $ fmap B.Binary $ take limit $ M.elems documents -- (B.Binary . BL.toStrict)
 
 viewDocumentById :: B.ObjectId -> Query Database UFResponse
 viewDocumentById objid 
@@ -96,7 +91,7 @@ parseOrdOps funcDoc documents = let ltResults = filterByField "$LT" funcDoc (<) 
 viewDocumentsByFieldEval :: [B.Field] -> Int -> DocumentIndex -> Query Database UFResponse
 viewDocumentsByFieldEval func limit indexed
     = do d@Database{..} <- ask
-         return $ UFResponse UFSuccess $ fmap (B.Binary) $ catMaybes $ fmap (\d -> M.lookup d documents) $ 
+         return $ UFResponse UFSuccess $ fmap B.Binary $ catMaybes $ fmap (\d -> M.lookup d documents) $ 
                  take limit $ Set.toAscList $ parseAll func indexed
                                       
 $(makeAcidic ''Database ['addDocument, 'unwrapDB, 'viewDocuments, 'viewDocumentById, 'viewDocumentByField, 'viewDocumentsByFieldEval])
@@ -110,7 +105,8 @@ insertNewDocument (B.Binary serialized) = do
     tvi <- asks docIndex
     indexed <- liftIO $ readTVarIO tvi
     nextKey <- liftIO $ B.genObjectId
-    liftIO $ do update db (AddDocument nextKey serialized)
+    liftIO $ do let serialized' = BL.fromStrict serialized
+                update db (AddDocument nextKey serialized)
                 atomically $ writeTVar tvi $ buildIndex nextKey serialized indexed
 
 getById :: B.ObjectId -> ServerApplication UFResponse
@@ -131,6 +127,9 @@ constructStartCache db = do
     
 buildResponse :: UFResponse -> B.Document
 buildResponse r = [ "response" B.:= (B.Doc $ toBSON $ r) ]
+
+emptyGet :: Decoder B.Document
+emptyGet = runGetIncremental getDocument
 
 documentConvert :: Decoder B.Document -> Conduit BS.ByteString ServerApplication B.Document
 documentConvert built = await >>= maybe (return ()) handleConvert

@@ -9,7 +9,7 @@ import           Data.Bson.Generic
 import qualified Data.ByteString as BS
 import           GHC.Generics
 import qualified Data.Text as T
-import qualified Data.Map.Strict as M
+import qualified Data.Map as M
 import           Data.Set (Set)
 import           Control.Monad.Reader
 import           Control.Concurrent.STM
@@ -45,7 +45,7 @@ buildFieldIndex Nothing (field:docs)   = (field):(buildFieldIndex Nothing docs)
 buildFieldIndex (Just pl) (field:docs) = (field {B.label = T.concat [pl, ".", B.label field]}):(buildFieldIndex (Just pl) docs)
                    
 
-data Database = Database { documents :: !(M.Map B.ObjectId BS.ByteString) }
+data Database = Database { documents :: (M.Map B.ObjectId BS.ByteString) }
     deriving (Typeable)
 
 $(deriveSafeCopy 0 'base ''Database)
