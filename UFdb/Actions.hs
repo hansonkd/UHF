@@ -54,7 +54,7 @@ viewDocumentByField :: B.Field -> DocumentIndex -> Query Database UFResponse
 viewDocumentByField field indexed
     = do d@Database{..} <- ask
          case (M.lookup field (fieldIndex indexed)) of
-            Just docSet -> return $ UFResponse UFSuccess $ map B.Binary $ catMaybes $ map (\docId -> M.lookup docId documents) $ Set.toList docSet
+            Just docSet -> return $ UFResponse UFSuccess $ map B.Binary $ catMaybes $ map (\docId -> M.lookup docId documents) $ Set.toAscList docSet
             Nothing     -> return $ UFResponse UFFailure []
 
 setOperation :: B.Label -> [B.Field] -> (Set B.ObjectId -> Set B.ObjectId -> Set B.ObjectId) -> DocumentIndex -> Set B.ObjectId
@@ -92,7 +92,7 @@ viewDocumentsByFieldEval :: [B.Field] -> Int -> DocumentIndex -> Query Database 
 viewDocumentsByFieldEval func limit indexed
     = do d@Database{..} <- ask
          return $ UFResponse UFSuccess $ fmap (B.Binary) $ catMaybes $ fmap (\d -> M.lookup d documents) $ 
-                 take limit $ Set.toList $ parseAll func indexed
+                 take limit $ Set.toAscList $ parseAll func indexed
                                       
 $(makeAcidic ''Database ['addDocument, 'unwrapDB, 'viewDocuments, 'viewDocumentById, 'viewDocumentByField, 'viewDocumentsByFieldEval])
 

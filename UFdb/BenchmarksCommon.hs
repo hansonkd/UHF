@@ -9,7 +9,8 @@ import           UFdb.Types
 import           GHC.Generics
 import           Data.Typeable
 
-import qualified Data.ByteString.Lazy.Char8 as C
+import qualified Data.ByteString.Char8 as C
+import qualified Data.ByteString.Lazy.Char8 as CL
 import qualified Data.Bson as B
 import           Data.Bson.Generic
 import           Data.Binary.Put
@@ -28,13 +29,15 @@ data TestBsonData = TestBsonData { test20 :: Maybe TestBsonData, test21 :: Doubl
 instance ToBSON TestBsonData
 instance FromBSON TestBsonData
 
+baseDoc :: [Double] -> Double -> B.Document
+baseDoc arr x = ["test20" B.:= B.Array [B.Doc [ "test20" B.:= B.Array [], "test21" B.:= B.Float x, "test22" B.:= B.Array (map B.Float arr)]], "test21" B.:= B.Float x, "test22" B.:= B.Array (map B.Float arr)]
+            where incFieldName = "test" `C.append` (C.pack $ show x)
+littleDoc x = baseDoc [] x
+bigDoc x = baseDoc [0..500] x
 
-littleDoc x = TestBsonData (Just $ TestBsonData Nothing (x*10) []) x []
-bigDoc    x = TestBsonData (Just $ TestBsonData Nothing (x*10) [0..500]) x [0..500]
+convertToValue x = B.Bin $ B.Binary $ CL.toStrict $ runPut $ putDocument x
 
-convertToValue x = B.Bin $ B.Binary $ C.toStrict $ runPut $ putDocument x
-
-convertToPutOperation x = ["operation" B.:= (B.Doc $ toBSON $ UFOperation UFPut $ (["payload" B.:= (convertToValue $ toBSON x)]))]
+convertToPutOperation x = ["operation" B.:= (B.Doc $ toBSON $ UFOperation UFPut $ (["payload" B.:= (convertToValue $ x)]))]
 
 serializedPutSmall x = convertToPutOperation $ littleDoc x
 
