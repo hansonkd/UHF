@@ -15,16 +15,17 @@ import           UFdb.BenchmarksCommon
 
 main = do
     pipe <- runIOE $ connect (host "127.0.0.1")
+    let accessPipe = access pipe UnconfirmedWrites "test"
     putStrLn "Now Clearing"
-    void $ timeIt $ access pipe UnconfirmedWrites "test" $ clearDocuments
+    void $ timeIt $ accessPipe $ clearDocuments
     putStrLn "Done. \nPutting 1000 small documents to server individually..."
-    void $ timeIt $ access pipe UnconfirmedWrites "test" $ forM_ testRangeInsert (\x -> insertSmallDocuments x)
+    void $ timeIt $ accessPipe $ forM_ testRangeInsert (\x -> insertSmallDocuments x)
     putStrLn "Done. \nPutting 1000 big documents to server individually..."
-    void $ timeIt $ access pipe UnconfirmedWrites "test" $ forM_ testRangeInsert (\x -> insertBigDocuments x)
+    void $ timeIt $ accessPipe $ forM_ testRangeInsert (\x -> insertBigDocuments x)
     putStrLn "Done. \nNow Searching over documents 100x..."
-    void $ timeIt $ access pipe UnconfirmedWrites "test" $ forM_ testRangeSearch (\x -> searchDocuments x)
+    void $ timeIt $ accessPipe $ forM_ testRangeSearch (\x -> searchDocuments x)
     putStrLn "Showing results of query:"
-    result <- access pipe UnconfirmedWrites "test" $ do
+    result <- accessPipe $ do
                     docs <- searchDocuments 1
                     liftIO $ print $ length docs
     putStrLn "Done."

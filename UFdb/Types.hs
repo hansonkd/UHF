@@ -8,7 +8,6 @@ import qualified Data.Bson as B
 import           Data.Bson.Generic
 import qualified Data.ByteString as BS
 import           GHC.Generics
-import qualified Data.Text as T
 import qualified Data.Map.Strict as M
 import           Data.Set (Set)
 import           Control.Monad.Reader
@@ -33,24 +32,14 @@ data UFDocument = UFDocument { documentKey :: B.ObjectId, documentData :: B.Docu
 instance ToBSON UFDocument
 instance FromBSON UFDocument
 $(deriveSafeCopy 0 'base ''UFDocument)
-
--- | basically we just want to flatten  our document and then have our labels show their parents
--- | e.g [child : [count : 4], someField : 9] becomes [ child.count : 4, somefield : 9 ]
-buildFieldIndex :: Maybe B.Label -> [B.Field] -> [B.Field]
-buildFieldIndex _ ([])                                          = []
-buildFieldIndex Nothing    (df@(fl B.:= (B.Doc docField)):docs) = (buildFieldIndex (Just fl) docField) ++ (buildFieldIndex Nothing docs)
-buildFieldIndex (Just pl)  (df@(fl B.:= (B.Doc docField)):docs) = (flip buildFieldIndex docField (Just $ T.concat [pl, ".", fl])) ++ 
-                                                (buildFieldIndex (Just pl) docs)
-buildFieldIndex Nothing (field:docs)   = (field):(buildFieldIndex Nothing docs)
-buildFieldIndex (Just pl) (field:docs) = (field {B.label = T.concat [pl, ".", B.label field]}):(buildFieldIndex (Just pl) docs)
                    
 
-data Database = Database { documents :: (M.Map B.ObjectId BS.ByteString) }
+data Database = Database { documents :: !(M.Map B.ObjectId BS.ByteString) }
     deriving (Typeable)
 
 $(deriveSafeCopy 0 'base ''Database)
 
-data DocumentIndex = DocumentIndex { fieldIndex :: M.Map B.Field (Set B.ObjectId)
+data DocumentIndex = DocumentIndex { fieldIndex :: !(M.Map B.Field (Set B.ObjectId))
                                    } deriving (Generic, Eq, Ord, Typeable, Show)
                                    
 

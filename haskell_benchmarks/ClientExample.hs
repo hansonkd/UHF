@@ -45,21 +45,15 @@ benchmarkConduit = do
     timeIt $ forM_ testRangeInsert (\x -> do
         yield $ BL.toStrict $ runPut $ putDocument $ serializedPutSmall x
         void $ await)
-    
-    liftIO $ putStrLn "Push enter to continue"
-    _ <- liftIO $ getLine
 
     liftIO $ putStrLn "Done. \nPutting 1000 big documents to server individually..."
     timeIt $ forM_ testRangeInsert (\x -> do
         yield $ BL.toStrict $ runPut $ putDocument $ serializedPutBig x
         void $ await)
-    
-    liftIO $ putStrLn "Push enter to continue"
-    _ <- liftIO $ getLine
 
     liftIO $ putStrLn "Done Putting \nGetting documents from server 100 times..."
     timeIt $ forM_ testRangeSearch (\x -> do
         yield $ BL.toStrict $ runPut $ putDocument $ serializedGetUnion x
-        void $ await) --await >>= (liftIO . print))
+        void $ await)
         
     liftIO $ putStrLn "Done!"

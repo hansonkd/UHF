@@ -55,7 +55,6 @@ operationConduit = awaitForever handleOperation
                             UFPut    -> do if (fromMaybe False $ B.lookup "unconfirmedWrite" opts)
                                               then do curServer <- ask
                                                       pl        <- B.lookup "payload" opts
-                                                      liftIO $ print "h"
                                                       void $ liftIO $ forkIO $ void $ flip runReaderT curServer $ insertNewDocument pl
                                               else insertNewDocument =<< B.lookup "payload" opts
                                            return $ UFResponse UFSuccess []

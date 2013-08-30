@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell, TypeFamilies, DeriveDataTypeable, RecordWildCards, OverloadedStrings, BangPatterns #-}
+{-# LANGUAGE TemplateHaskell, TypeFamilies, DeriveDataTypeable, RecordWildCards, OverloadedStrings #-}
 
 module UFdb.Actions where
 
@@ -21,9 +21,21 @@ import qualified Data.Set       as Set
 import           System.IO.Unsafe (unsafePerformIO)
 import           Data.Conduit
 import           Control.Exception (evaluate)
+import qualified Data.Text as T
 
+-- | Should go into Internal
 emptyGet :: Decoder B.Document
 emptyGet = runGetIncremental getDocument
+
+-- | basically we just want to flatten  our document and then have our labels show their parents
+-- | e.g [child : [count : 4], someField : 9] becomes [ child.count : 4, somefield : 9 ]
+buildFieldIndex :: Maybe B.Label -> [B.Field] -> [B.Field]
+buildFieldIndex _ ([])                                          = []
+buildFieldIndex Nothing    (df@(fl B.:= (B.Doc docField)):docs) = (buildFieldIndex (Just fl) docField) ++ (buildFieldIndex Nothing docs)
+buildFieldIndex (Just pl)  (df@(fl B.:= (B.Doc docField)):docs) = (flip buildFieldIndex docField (Just $ T.concat [pl, ".", fl])) ++ 
+                                                (buildFieldIndex (Just pl) docs)
+buildFieldIndex Nothing (field:docs)   = (field):(buildFieldIndex Nothing docs)
+buildFieldIndex (Just pl) (field:docs) = (field {B.label = T.concat [pl, ".", B.label field]}):(buildFieldIndex (Just pl) docs)
 
 buildIndex :: B.ObjectId -> BS.ByteString -> DocumentIndex -> DocumentIndex
 buildIndex objId serialized docIndex@DocumentIndex{..} = DocumentIndex $ newFieldIndex
@@ -33,8 +45,21 @@ buildIndex objId serialized docIndex@DocumentIndex{..} = DocumentIndex $ newFiel
                        otherwise  -> []
            fields = buildFieldIndex Nothing $ doc
            newFieldIndex = foldr update fieldIndex fields
-               where update field fi = M.insertWith Set.union field (Set.singleton objId) $! fi
+               where update field fi = M.insertWith Set.union field (Set.singleton objId) fi
 
+
+documentConvert :: Decoder B.Document -> Conduit BS.ByteString ServerApplication B.Document
+documentConvert built = await >>= maybe (return ()) handleConvert
+    where handleConvert msg = do
+                        let newMsg = pushChunk built msg
+                        case newMsg of
+                                Done a n doc -> do yield doc
+                                                   documentConvert $ pushChunk emptyGet a
+                                Partial _    -> documentConvert newMsg
+                                Fail a _ err -> do
+                                    liftIO $ print err
+                                    documentConvert $ pushChunk emptyGet a
+-- | Acidstate stuff
 addDocument :: B.ObjectId -> BS.ByteString -> Update Database ()
 addDocument docKey docData
     = do d@Database{..} <- get
@@ -103,6 +128,8 @@ viewDocumentsByFieldEval func limit indexed
                                       
 $(makeAcidic ''Database ['addDocument, 'unwrapDB, 'viewDocuments, 'viewDocumentById, 'viewDocumentByField, 'viewDocumentsByFieldEval])
 
+
+-- | Interface for server.
 loadStateFromPath :: FilePath -> IO (AcidState Database)
 loadStateFromPath fp = openLocalStateFrom fp (Database (M.empty))
 
@@ -112,10 +139,8 @@ insertNewDocument (B.Binary serialized) = do
     tvi <- asks docIndex
     indexed <- liftIO $ readTVarIO tvi
     nextKey <- liftIO $ B.genObjectId
-    liftIO $ do let !newIndex = buildIndex nextKey serialized indexed
-                evaluate newIndex
-                update db (AddDocument nextKey serialized)
-                atomically $ writeTVar tvi $! newIndex
+    liftIO $ do update db (AddDocument nextKey serialized)
+                atomically $ writeTVar tvi $! buildIndex nextKey serialized indexed
 
 getById :: B.ObjectId -> ServerApplication UFResponse
 getById objid = do
@@ -127,7 +152,7 @@ filterByFieldEval func = do
     database <- asks acidDB
     indexed <-  asks docIndex >>= (liftIO . readTVarIO)
     liftIO $ query database (ViewDocumentsByFieldEval func 10 indexed)
-    
+
 constructStartCache :: AcidState Database -> IO (DocumentIndex)
 constructStartCache db = do
             raw_data <- query db UnwrapDB
@@ -135,16 +160,3 @@ constructStartCache db = do
     
 buildResponse :: UFResponse -> B.Document
 buildResponse r = [ "response" B.:= (B.Doc $ toBSON $ r) ]
-
-documentConvert :: Decoder B.Document -> Conduit BS.ByteString ServerApplication B.Document
-documentConvert built = await >>= maybe (return ()) handleConvert
-    where handleConvert msg = do
-                        let newMsg = pushChunk built msg
-                        case newMsg of
-                                Done a n doc -> do yield doc
-                                                   documentConvert $ pushChunk emptyGet a
-                                Partial _    -> documentConvert newMsg
-                                Fail a _ err -> do
-                                    liftIO $ print err
-                                    yield $ buildResponse $ UFResponse UFFailure []
-                                    documentConvert $ pushChunk emptyGet a
