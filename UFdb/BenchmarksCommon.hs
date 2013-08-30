@@ -11,6 +11,7 @@ import           Data.Typeable
 
 import qualified Data.ByteString.Char8 as C
 import qualified Data.ByteString.Lazy.Char8 as CL
+import qualified Data.Text as T
 import qualified Data.Bson as B
 import           Data.Bson.Generic
 import           Data.Binary.Put
@@ -30,8 +31,8 @@ instance ToBSON TestBsonData
 instance FromBSON TestBsonData
 
 baseDoc :: [Double] -> Double -> B.Document
-baseDoc arr x = ["test20" B.:= B.Array [B.Doc [ "test20" B.:= B.Array [], "test21" B.:= B.Float x, "test22" B.:= B.Array (map B.Float arr)]], "test21" B.:= B.Float x, "test22" B.:= B.Array (map B.Float arr)]
-            where incFieldName = "test" `C.append` (C.pack $ show x)
+baseDoc arr x = ["test20" B.:= B.Array [B.Doc [ incFieldName B.:= B.Array [], "test21" B.:= B.Float x, "test22" B.:= B.Array (map B.Float arr)]], "test21" B.:= B.Float x, "test22" B.:= B.Array (map B.Float arr)]
+            where incFieldName = "test" `T.append` (T.pack $ show x)
 littleDoc x = baseDoc [] x
 bigDoc x = baseDoc [0..500] x
 

@@ -9,7 +9,7 @@ import           Data.Bson.Generic
 import qualified Data.ByteString as BS
 import           GHC.Generics
 import qualified Data.Text as T
-import qualified Data.Map as M
+import qualified Data.Map.Strict as M
 import           Data.Set (Set)
 import           Control.Monad.Reader
 import           Control.Concurrent.STM

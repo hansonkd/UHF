@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell, TypeFamilies, DeriveDataTypeable, RecordWildCards, OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell, TypeFamilies, DeriveDataTypeable, RecordWildCards, OverloadedStrings, BangPatterns #-}
 
 module UFdb.Actions where
 
@@ -10,23 +10,30 @@ import           Data.Bson.Binary
 import           Data.Binary.Get
 import           Data.Binary.Put
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Lazy as BL
 import           Data.Bson.Generic
 import           Data.Acid
 import           Data.Maybe (fromMaybe, catMaybes)
-import qualified Data.Map as M
+import qualified Data.Map.Strict as M
 import           Control.Monad.Reader
 import           Control.Concurrent.STM
 import           Data.Set       (Set)
 import qualified Data.Set       as Set
 import           System.IO.Unsafe (unsafePerformIO)
 import           Data.Conduit
+import           Control.Exception (evaluate)
+
+emptyGet :: Decoder B.Document
+emptyGet = runGetIncremental getDocument
 
 buildIndex :: B.ObjectId -> BS.ByteString -> DocumentIndex -> DocumentIndex
 buildIndex objId serialized docIndex@DocumentIndex{..} = DocumentIndex $ newFieldIndex
-     where fields = buildFieldIndex Nothing $ runGet getDocument $ BL.fromStrict serialized
+     where conv   = pushChunk emptyGet serialized
+           doc    = case conv of
+                       Done _ _ d -> d
+                       otherwise  -> []
+           fields = buildFieldIndex Nothing $ doc
            newFieldIndex = foldr update fieldIndex fields
-               where update field fi = M.insertWith Set.union field (Set.singleton objId) fi
+               where update field fi = M.insertWith Set.union field (Set.singleton objId) $! fi
 
 addDocument :: B.ObjectId -> BS.ByteString -> Update Database ()
 addDocument docKey docData
@@ -105,9 +112,10 @@ insertNewDocument (B.Binary serialized) = do
     tvi <- asks docIndex
     indexed <- liftIO $ readTVarIO tvi
     nextKey <- liftIO $ B.genObjectId
-    liftIO $ do let serialized' = BL.fromStrict serialized
+    liftIO $ do let !newIndex = buildIndex nextKey serialized indexed
+                evaluate newIndex
                 update db (AddDocument nextKey serialized)
-                atomically $ writeTVar tvi $ buildIndex nextKey serialized indexed
+                atomically $ writeTVar tvi $! newIndex
 
 getById :: B.ObjectId -> ServerApplication UFResponse
 getById objid = do
@@ -127,9 +135,6 @@ constructStartCache db = do
     
 buildResponse :: UFResponse -> B.Document
 buildResponse r = [ "response" B.:= (B.Doc $ toBSON $ r) ]
-
-emptyGet :: Decoder B.Document
-emptyGet = runGetIncremental getDocument
 
 documentConvert :: Decoder B.Document -> Conduit BS.ByteString ServerApplication B.Document
 documentConvert built = await >>= maybe (return ()) handleConvert
