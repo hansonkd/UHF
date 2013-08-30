@@ -22,8 +22,10 @@ import           System.IO.Unsafe (unsafePerformIO)
 import           Data.Conduit
 import           Control.Exception (evaluate)
 import qualified Data.Text as T
+import           Data.List (foldl')
 
--- | Should go into Internal
+-- | Stuff that should go into Internal
+-- | 
 emptyGet :: Decoder B.Document
 emptyGet = runGetIncremental getDocument
 
@@ -44,8 +46,8 @@ buildIndex objId serialized docIndex@DocumentIndex{..} = DocumentIndex $ newFiel
                        Done _ _ d -> d
                        otherwise  -> []
            fields = buildFieldIndex Nothing $ doc
-           newFieldIndex = foldr update fieldIndex fields
-               where update field fi = M.insertWith Set.union field (Set.singleton objId) fi
+           newFieldIndex = foldl' update fieldIndex fields
+               where update fi field = M.insertWith Set.union field (Set.singleton objId) fi
 
 
 documentConvert :: Decoder B.Document -> Conduit BS.ByteString ServerApplication B.Document
@@ -102,23 +104,23 @@ filterByField funcLabel funcDoc func docIndex = fromMaybe Set.empty $ do
                             label      <- B.lookup "label" funcParams
                             val        <- B.look "value" funcParams
                             let filteredMap = (M.filterWithKey (\f _ -> (B.label f == label) && (func f (label B.:= val))) $ fieldIndex docIndex) 
-                            Just $ foldr Set.union Set.empty $ M.elems filteredMap
+                            Just $ foldl' Set.union Set.empty $ M.elems filteredMap
 
 parseAll :: [B.Field] -> DocumentIndex -> Set B.ObjectId
 parseAll funcDoc documents = let setResults = parseSetOps funcDoc documents
                                  ordResults = parseOrdOps funcDoc documents
-                             in foldr Set.union Set.empty [setResults, ordResults]
+                             in foldl' Set.union Set.empty [setResults, ordResults]
 
 parseSetOps :: [B.Field] -> DocumentIndex -> Set B.ObjectId
 parseSetOps funcDoc documents = let unionResults        = setOperation "$union" funcDoc Set.union documents
                                     intersectionResults = setOperation "$intersection" funcDoc Set.intersection documents
-                                in foldr Set.union Set.empty [unionResults, intersectionResults]
+                                in foldl' Set.union Set.empty [unionResults, intersectionResults]
 
 parseOrdOps :: [B.Field] -> DocumentIndex -> Set B.ObjectId
 parseOrdOps funcDoc documents = let ltResults = filterByField "$LT" funcDoc (<) documents
                                     gtResults = filterByField "$GT" funcDoc (>) documents
                                     eResults  = filterByField "$EQ" funcDoc (==) documents
-                                in foldr Set.union Set.empty [ltResults, gtResults, eResults]
+                                in foldl' Set.union Set.empty [ltResults, gtResults, eResults]
                                 
 viewDocumentsByFieldEval :: [B.Field] -> Int -> DocumentIndex -> Query Database UFResponse
 viewDocumentsByFieldEval func limit indexed
@@ -156,7 +158,7 @@ filterByFieldEval func = do
 constructStartCache :: AcidState Database -> IO (DocumentIndex)
 constructStartCache db = do
             raw_data <- query db UnwrapDB
-            return $! M.foldrWithKey (\k v i -> buildIndex k v i) emptyDocIndex raw_data
+            return $! M.foldlWithKey' (\i k v -> buildIndex k v i) emptyDocIndex raw_data
     
 buildResponse :: UFResponse -> B.Document
 buildResponse r = [ "response" B.:= (B.Doc $ toBSON $ r) ]
