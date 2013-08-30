@@ -156,7 +156,7 @@ filterByFieldEval func = do
 constructStartCache :: AcidState Database -> IO (DocumentIndex)
 constructStartCache db = do
             raw_data <- query db UnwrapDB
-            return $ M.foldrWithKey (\k v i -> buildIndex k v i) emptyDocIndex raw_data
+            return $! M.foldrWithKey (\k v i -> buildIndex k v i) emptyDocIndex raw_data
     
 buildResponse :: UFResponse -> B.Document
 buildResponse r = [ "response" B.:= (B.Doc $ toBSON $ r) ]
