@@ -1,0 +1,3 @@
+[submodule "scotty"]
+	path = scotty
+	url = https://github.com/xich/scotty.git

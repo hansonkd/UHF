@@ -1,0 +1,40 @@
+module Main where
+
+import qualified Data.Map as M
+
+type ClassId  = String
+type ObjectId = String
+type User     = String
+
+data User = SpecificUser User | AnonymousUser
+    deriving (Show)
+
+data OperationTarget = ClassTarget ClassId | GenericTarget | ObjectTarget ObjectId
+    deriving (Show)
+
+data OperationType = See | Create | Update | SeeAll | Custom ByteString
+    deriving (Show)
+
+data PermissionType = Positive | Negative
+    deriving (Show)
+
+data Permission = Permission OperationType OperationTarget PermissionType
+    deriving (Show)
+
+type PermissionDatabase = M.Map User [Permission]
+
+
+
+examplePermissions
+
+admin :: User
+admin = "Admin"
+
+staff :: Staff
+staff = "Staff"
+
+jim :: User
+jim = "Jim"
+
+
+

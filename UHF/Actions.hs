@@ -1,28 +1,36 @@
 {-# LANGUAGE TemplateHaskell, TypeFamilies, DeriveDataTypeable, RecordWildCards, OverloadedStrings #-}
 
-module UFdb.Actions where
+module UHF.Actions where
 
-import           Control.Monad.State ( get, put )
-import           Control.Monad.Reader ( ask )
-import qualified Data.Bson as B
-import           UFdb.Types
-import           Data.Bson.Binary
-import           Data.Binary.Get
-import           Data.Binary.Put
-import qualified Data.ByteString as BS
-import           Data.Bson.Generic
-import           Data.Acid
-import           Data.Maybe (fromMaybe, catMaybes)
-import qualified Data.Map.Strict as M
-import           Control.Monad.Reader
+import           UHF.Types
+
+import           Control.Concurrent (forkIO)
 import           Control.Concurrent.STM
+import           Control.Exception (evaluate)
+import           Control.Monad.Trans (liftIO, MonadIO, lift)
+import           Control.Monad.State ( get, put )
+import           Control.Monad.Reader ( ask, asks, runReaderT )
+import           Control.Monad (void)
+
+import           Data.Acid
+
+import qualified Data.Bson as B
+import           Data.Bson.Binary
+import           Data.Bson.Generic
+import           Data.Binary.Get
+import           Data.Binary.Put hiding (Put)
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy  as BSL
+
+import           Data.Conduit
+import qualified Data.Map.Strict as M
+import           Data.Maybe (fromMaybe, catMaybes)
 import           Data.Set       (Set)
 import qualified Data.Set       as Set
-import           System.IO.Unsafe (unsafePerformIO)
-import           Data.Conduit
-import           Control.Exception (evaluate)
 import qualified Data.Text as T
 import           Data.List (foldl')
+import           System.IO.Unsafe (unsafePerformIO)
+
 
 -- | Stuff that should go into Internal
 -- | 
@@ -67,29 +75,34 @@ addDocument docKey docData
     = do d@Database{..} <- get
          put $ Database $ M.insert docKey docData documents
 
+replaceDocument :: B.ObjectId -> BS.ByteString -> Update Database ()
+replaceDocument docKey docData
+    = do d@Database{..} <- get
+         put $ Database $ M.update (\_ -> Just docData) docKey documents
+         
 unwrapDB :: Query Database (M.Map B.ObjectId BS.ByteString)
 unwrapDB = do d@Database{..} <- ask
               return documents
          
-viewDocuments :: Int -> Query Database UFResponse
+viewDocuments :: Int -> Query Database Response
 viewDocuments limit
     = do d@Database{..} <- ask
-         return $ UFResponse UFSuccess $ fmap B.Binary $ take limit $ M.elems documents -- (B.Binary . BL.toStrict)
+         return $ Response Success $ fmap B.Binary $ take limit $ M.elems documents -- (B.Binary . BL.toStrict)
 
-viewDocumentById :: B.ObjectId -> Query Database UFResponse
+viewDocumentById :: B.ObjectId -> Query Database Response
 viewDocumentById objid 
     = do d@Database{..} <- ask
          case (M.lookup objid documents) of
-            Just doc -> return $ UFResponse UFSuccess [B.Binary doc]
-            Nothing  -> return $ UFResponse UFFailure []
+            Just doc -> return $ Response Success [B.Binary doc]
+            Nothing  -> return $ Response Failure []
             
 -- | Operations using our parsed 
-viewDocumentByField :: B.Field -> DocumentIndex -> Query Database UFResponse
+viewDocumentByField :: B.Field -> DocumentIndex -> Query Database Response
 viewDocumentByField field indexed
     = do d@Database{..} <- ask
          case (M.lookup field (fieldIndex indexed)) of
-            Just docSet -> return $ UFResponse UFSuccess $ map B.Binary $ catMaybes $ map (\docId -> M.lookup docId documents) $ Set.toAscList docSet
-            Nothing     -> return $ UFResponse UFFailure []
+            Just docSet -> return $ Response Success $ map B.Binary $ catMaybes $ map (\docId -> M.lookup docId documents) $ Set.toAscList docSet
+            Nothing     -> return $ Response Failure []
 
 setOperation :: B.Label -> [B.Field] -> (Set B.ObjectId -> Set B.ObjectId -> Set B.ObjectId) -> DocumentIndex -> Set B.ObjectId
 setOperation funcLabel funcDoc func documents = fromMaybe Set.empty $ do
@@ -122,13 +135,13 @@ parseOrdOps funcDoc documents = let ltResults = filterByField "$LT" funcDoc (<) 
                                     eResults  = filterByField "$EQ" funcDoc (==) documents
                                 in foldl' Set.union Set.empty [ltResults, gtResults, eResults]
                                 
-viewDocumentsByFieldEval :: [B.Field] -> Int -> DocumentIndex -> Query Database UFResponse
+viewDocumentsByFieldEval :: [B.Field] -> Int -> DocumentIndex -> Query Database Response
 viewDocumentsByFieldEval func limit indexed
     = do d@Database{..} <- ask
-         return $ UFResponse UFSuccess $ fmap B.Binary $ catMaybes $ fmap (\d -> M.lookup d documents) $ 
+         return $ Response Success $ fmap B.Binary $ catMaybes $ fmap (\d -> M.lookup d documents) $ 
                  take limit $ Set.toAscList $ parseAll func indexed
                                       
-$(makeAcidic ''Database ['addDocument, 'unwrapDB, 'viewDocuments, 'viewDocumentById, 'viewDocumentByField, 'viewDocumentsByFieldEval])
+$(makeAcidic ''Database ['addDocument, 'replaceDocument, 'unwrapDB, 'viewDocuments, 'viewDocumentById, 'viewDocumentByField, 'viewDocumentsByFieldEval])
 
 
 -- | Interface for server.
@@ -144,12 +157,20 @@ insertNewDocument (B.Binary serialized) = do
     liftIO $ do update db (AddDocument nextKey serialized)
                 atomically $ writeTVar tvi $! buildIndex nextKey serialized indexed
 
-getById :: B.ObjectId -> ServerApplication UFResponse
+updateDocument :: B.ObjectId -> B.Binary -> ServerApplication ()
+updateDocument docKey (B.Binary serialized) = do
+    db  <- asks acidDB
+    tvi <- asks docIndex
+    indexed <- liftIO $ readTVarIO tvi
+    liftIO $ do update db (ReplaceDocument docKey serialized)
+                atomically $ writeTVar tvi $! buildIndex docKey serialized indexed
+                
+getById :: B.ObjectId -> ServerApplication Response
 getById objid = do
     db  <- asks acidDB
     liftIO $ query db (ViewDocumentById objid)
          
-filterByFieldEval :: [B.Field] -> ServerApplication UFResponse
+filterByFieldEval :: [B.Field] -> ServerApplication Response
 filterByFieldEval func = do
     database <- asks acidDB
     indexed <-  asks docIndex >>= (liftIO . readTVarIO)
@@ -160,5 +181,31 @@ constructStartCache db = do
             raw_data <- query db UnwrapDB
             return $! M.foldlWithKey' (\i k v -> buildIndex k v i) emptyDocIndex raw_data
     
-buildResponse :: UFResponse -> B.Document
+buildResponse :: Response -> B.Document
 buildResponse r = [ "response" B.:= (B.Doc $ toBSON $ r) ]
+
+
+handleOperation :: Operation -> ServerApplication Response
+handleOperation (Operation uft opts) = 
+    do res <- case uft of
+            Put    -> do if (fromMaybe False $ B.lookup "unconfirmedWrite" opts)
+                              then do curServer <- ask
+                                      pl        <- B.lookup "payload" opts
+                                      void $ liftIO $ forkIO $ void $ flip runReaderT curServer $ insertNewDocument pl
+                              else insertNewDocument =<< B.lookup "payload" opts
+                         return $ Response Success []
+            Update -> do docId <- B.lookup "id" opts
+                         payload <- B.lookup "payload" opts
+                         updateDocument docId payload
+                         return $ Response Success []
+            Get    -> getById =<< B.lookup "id" opts
+            Filter -> filterByFieldEval =<< B.lookup "parameters" opts
+       return res
+
+operationConduit :: Conduit B.Document ServerApplication BS.ByteString
+operationConduit = awaitForever handleDocument
+        where handleDocument doc = case (B.lookup "operation" doc) of
+                Just op -> do
+                    bs_response <- lift $ handleOperation op
+                    yield $ BSL.toStrict $ runPut $ putDocument $ buildResponse bs_response
+                Nothing   -> liftIO $ print "Error: no operation found."

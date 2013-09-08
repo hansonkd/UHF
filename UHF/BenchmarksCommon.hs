@@ -2,9 +2,9 @@
 {-# LANGUAGE OverloadedStrings      #-}
 {-# LANGUAGE DeriveDataTypeable     #-}
 
-module UFdb.BenchmarksCommon where
+module UHF.BenchmarksCommon where
     
-import           UFdb.Types
+import           UHF.Types
 
 import           GHC.Generics
 import           Data.Typeable

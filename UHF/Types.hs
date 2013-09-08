@@ -1,5 +1,5 @@
 {-# LANGUAGE TypeFamilies, DeriveDataTypeable, TemplateHaskell, DeriveGeneric, OverloadedStrings #-}
-module UFdb.Types where
+module UHF.Types where
 
 import           Data.Acid
 import           Data.SafeCopy
@@ -51,27 +51,27 @@ data ServerData = ServerData { acidDB :: AcidState Database, docIndex :: TVar (D
 
 type ServerApplication = ReaderT ServerData IO
 
-data UFOperationType = UFPut | UFGet | UFFilter
+data OperationType = Put | Get | Update | Filter
   deriving (Generic, Show, Typeable, Eq)
-instance ToBSON UFOperationType
-instance FromBSON UFOperationType
+instance ToBSON OperationType
+instance FromBSON OperationType
 
-data UFOperation = UFOperation { operationType :: UFOperationType, operationOptions :: B.Document }
+data Operation = Operation { operationType :: OperationType, operationOptions :: B.Document }
   deriving (Generic, Show, Typeable, Eq)
-instance ToBSON UFOperation
-instance FromBSON UFOperation
+instance ToBSON Operation
+instance FromBSON Operation
 
-data UFResponseType = UFSuccess | UFFailure
+data ResponseType = Success | Failure
   deriving (Generic, Show, Typeable, Eq)
-instance ToBSON UFResponseType
-instance FromBSON UFResponseType
+instance ToBSON ResponseType
+instance FromBSON ResponseType
 
-data UFResponse = UFResponse { responseType :: UFResponseType, responseContent :: [B.Binary] }
+data Response = Response { responseType :: ResponseType, responseContent :: [B.Binary] }
   deriving (Generic, Show, Typeable, Eq)
-instance ToBSON UFResponse
-instance FromBSON UFResponse
+instance ToBSON Response
+instance FromBSON Response
 
-$(deriveSafeCopy 0 'base ''UFOperationType)
-$(deriveSafeCopy 0 'base ''UFOperation)
-$(deriveSafeCopy 0 'base ''UFResponseType)
-$(deriveSafeCopy 0 'base ''UFResponse)
+$(deriveSafeCopy 0 'base ''OperationType)
+$(deriveSafeCopy 0 'base ''Operation)
+$(deriveSafeCopy 0 'base ''ResponseType)
+$(deriveSafeCopy 0 'base ''Response)
